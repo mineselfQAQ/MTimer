@@ -1,0 +1,42 @@
+﻿<Window x:Class="MWPFProject_Timer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:MWPFProject_Timer"
+        mc:Ignorable="d"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        MouseDown="Window_MouseDown"
+        Width="200" Height="70">
+
+    <Grid>
+        <Border BorderBrush="#555" BorderThickness="1" 
+        CornerRadius="0" Background="#40FFFFFF"
+        Margin="0">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition />
+                    <RowDefinition Height="30"/>
+                </Grid.RowDefinitions>
+
+                <Border x:Name="Indicator" Width="10" Height="10" Background="White" Margin="0,3,3,0"
+                    HorizontalAlignment="Right" VerticalAlignment="Top" CornerRadius="1">
+                </Border>
+
+                <TextBlock Name="MinuteCounter" Text="00:00"
+                           Foreground="Black" FontSize="25" FontWeight="Bold"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+
+                <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center">
+                    <Button Name="StartBtn" Content="开" Click="StartBtn_Click" Margin="5" Width="20"/>
+                    <Button Name="StopBtn" Content="停" Click="StopBtn_Click" Margin="5" Width="20"/>
+                    <Button Name="ResetBtn" Content="重" Click="ResetBtn_Click" Margin="5" Width="20"/>
+                </StackPanel>
+                
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
