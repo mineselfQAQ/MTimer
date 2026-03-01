@@ -24,6 +24,7 @@ public partial class MainWindow : Window
 
     private DispatcherTimer? _minuteTimer = null;
     private int _minuteCount = 0;
+    private double _speedFactor = 1.0;
 
     public MainWindow()
     {
@@ -40,7 +41,7 @@ public partial class MainWindow : Window
     private void InitializeTimer()
     {
         _minuteTimer = new DispatcherTimer();
-        _minuteTimer.Interval = TimeSpan.FromMinutes(INTERVAL_TIME);
+        UpdateTimerInterval();
         _minuteTimer.Tick += MinuteTimer_Tick;
     }
 
@@ -58,6 +59,19 @@ public partial class MainWindow : Window
     {
         if (_minuteTimer != null && !_minuteTimer.IsEnabled)
         {
+            if (double.TryParse(FactorBox.Text, out double speed) && speed > 0)
+            {
+                _speedFactor = speed;
+            }
+            else
+            {
+                _speedFactor = 1;
+                FactorBox.Text = "1";
+            }
+
+            UpdateTimerInterval();
+            SpeedIndicator.Text = $"x{_speedFactor}";
+
             _minuteTimer.Start();
             Indicator.Background = Brushes.Green;
         }
@@ -122,5 +136,13 @@ public partial class MainWindow : Window
             File.WriteAllText(COUNT_FILE, _minuteCount.ToString());
         }
         catch { }
+    }
+
+    private void UpdateTimerInterval()
+    {
+        if (_minuteTimer == null) return;
+
+        double intervalMinutes = INTERVAL_TIME / _speedFactor;
+        _minuteTimer.Interval = TimeSpan.FromMinutes(intervalMinutes);
     }
 }

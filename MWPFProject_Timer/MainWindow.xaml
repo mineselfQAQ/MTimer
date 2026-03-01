@@ -26,16 +26,29 @@
                     HorizontalAlignment="Right" VerticalAlignment="Top" CornerRadius="1">
                 </Border>
 
+                <TextBlock x:Name="SpeedIndicator"
+                    FontSize="10" Margin="0,12,3,0"
+                    HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Text="x1"/>
+
                 <TextBlock Name="MinuteCounter" Text="00:00"
                            Foreground="Black" FontSize="25" FontWeight="Bold"
                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
 
-                <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center">
-                    <Button Name="StartBtn" Content="开" Click="StartBtn_Click" Margin="5" Width="20"/>
-                    <Button Name="StopBtn" Content="停" Click="StopBtn_Click" Margin="5" Width="20"/>
-                    <Button Name="ResetBtn" Content="重" Click="ResetBtn_Click" Margin="5" Width="20"/>
-                </StackPanel>
-                
+                <Grid Grid.Row="1">
+                    <StackPanel Orientation="Horizontal"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center">
+                        <Button Name="StartBtn" Content="开" Click="StartBtn_Click" Margin="5" Width="20"/>
+                        <Button Name="StopBtn" Content="停" Click="StopBtn_Click" Margin="5" Width="20"/>
+                        <Button Name="ResetBtn" Content="重" Click="ResetBtn_Click" Margin="5" Width="20"/>
+                    </StackPanel>
+
+                    <TextBox Name="FactorBox"
+                         Width="30" Height="20" FontSize="12" Margin="0,0,5,0"
+                         HorizontalAlignment="Right" VerticalAlignment="Center"
+                         Text="1"/>
+                </Grid>
             </Grid>
         </Border>
     </Grid>
