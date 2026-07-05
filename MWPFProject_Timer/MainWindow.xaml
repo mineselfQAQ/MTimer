@@ -441,6 +441,7 @@
                                                         <Grid.RowDefinitions>
                                                             <RowDefinition Height="Auto"/>
                                                             <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
                                                         </Grid.RowDefinitions>
                                                         <Grid.ColumnDefinitions>
                                                             <ColumnDefinition/>
@@ -492,7 +493,16 @@
                                                                 MinWidth="24"
                                                                 Padding="0"
                                                                 Margin="6,0,0,0"/>
-                                                        <TextBlock Grid.Row="1"
+                                                        <TextBox Grid.Row="1"
+                                                                 Grid.Column="0"
+                                                                 Grid.ColumnSpan="6"
+                                                                 Text="{Binding Note, UpdateSourceTrigger=PropertyChanged}"
+                                                                 IsReadOnly="{Binding IsReadOnly}"
+                                                                 TextChanged="PlanTaskTextChanged"
+                                                                 PreviewKeyDown="PlanTaskInput_PreviewKeyDown"
+                                                                 Style="{StaticResource TaskTextBox}"
+                                                                 Margin="0,8,0,0"/>
+                                                        <TextBlock Grid.Row="2"
                                                                    Grid.Column="1"
                                                                    Grid.ColumnSpan="4"
                                                                    Text="{Binding ActualDisplay}"
@@ -541,6 +551,10 @@
                                                         Padding="8"
                                                         Margin="0,0,0,8">
                                                     <Grid>
+                                                        <Grid.RowDefinitions>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                        </Grid.RowDefinitions>
                                                         <Grid.ColumnDefinitions>
                                                             <ColumnDefinition/>
                                                             <ColumnDefinition Width="46"/>
@@ -585,6 +599,14 @@
                                                                 MinWidth="24"
                                                                 Padding="0"
                                                                 Margin="6,0,0,0"/>
+                                                        <TextBox Grid.Row="1"
+                                                                 Grid.Column="0"
+                                                                 Grid.ColumnSpan="5"
+                                                                 Text="{Binding Note, UpdateSourceTrigger=PropertyChanged}"
+                                                                 TextChanged="LongTaskTextChanged"
+                                                                 PreviewKeyDown="LongTaskInput_PreviewKeyDown"
+                                                                 Style="{StaticResource TaskTextBox}"
+                                                                 Margin="0,8,0,0"/>
                                                     </Grid>
                                                 </Border>
                                             </DataTemplate>

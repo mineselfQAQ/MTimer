@@ -293,7 +293,8 @@ public partial class MainWindow : Window
         DailyEntry entry = NormalizeEntry(GetEntry(targetDate, create: true)!);
         entry.Tasks.Add(new PlanTask
         {
-            Name = task.Name.Trim()
+            Name = task.Name.Trim(),
+            Note = task.Note.Trim()
         });
         entry.Plan = BuildLegacyPlan(entry.Tasks);
 
@@ -470,6 +471,7 @@ public partial class MainWindow : Window
     private void SetExpanded(bool expanded)
     {
         SaveSelectedEntry();
+        Point windowCenter = GetWindowCenter();
 
         CompactPanel.Visibility = expanded ? Visibility.Collapsed : Visibility.Visible;
         ExpandedPanel.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
@@ -478,10 +480,10 @@ public partial class MainWindow : Window
         SetFixedWindowSize(
             expanded ? EXPANDED_WIDTH : COMPACT_WIDTH,
             expanded ? EXPANDED_HEIGHT : COMPACT_HEIGHT);
+        PositionWindowAroundCenter(windowCenter);
 
         if (expanded)
         {
-            CenterWindowInWorkArea();
             RenderCalendar();
             LoadSelectedEntry();
         }
@@ -506,11 +508,32 @@ public partial class MainWindow : Window
         MaxHeight = height;
     }
 
-    private void CenterWindowInWorkArea()
+    private Point GetWindowCenter()
     {
         Rect workArea = SystemParameters.WorkArea;
-        Left = workArea.Left + ((workArea.Width - Width) / 2);
-        Top = workArea.Top + ((workArea.Height - Height) / 2);
+        double left = double.IsNaN(Left) ? workArea.Left : Left;
+        double top = double.IsNaN(Top) ? workArea.Top : Top;
+        return new Point(left + (Width / 2), top + (Height / 2));
+    }
+
+    private void PositionWindowAroundCenter(Point center)
+    {
+        Rect workArea = SystemParameters.WorkArea;
+        double left = center.X - (Width / 2);
+        double top = center.Y - (Height / 2);
+
+        Left = ClampWindowCoordinate(left, workArea.Left, workArea.Right - Width);
+        Top = ClampWindowCoordinate(top, workArea.Top, workArea.Bottom - Height);
+    }
+
+    private static double ClampWindowCoordinate(double value, double min, double max)
+    {
+        if (max < min)
+        {
+            return min;
+        }
+
+        return Math.Clamp(value, min, max);
     }
 
     private void RenderCalendar()
@@ -1369,6 +1392,7 @@ public sealed class DailyEntry
 public sealed class LongTermTask : INotifyPropertyChanged
 {
     private string _name = string.Empty;
+    private string _note = string.Empty;
     private int _progress;
     private string _progressText = "0";
 
@@ -1397,6 +1421,22 @@ public sealed class LongTermTask : INotifyPropertyChanged
         set => SetProgress(value);
     }
 
+    public string Note
+    {
+        get => _note;
+        set
+        {
+            if (_note == value)
+            {
+                return;
+            }
+
+            _note = value ?? string.Empty;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(IsEmpty));
+        }
+    }
+
     [JsonIgnore]
     public string ProgressText
     {
@@ -1421,7 +1461,9 @@ public sealed class LongTermTask : INotifyPropertyChanged
     }
 
     [JsonIgnore]
-    public bool IsEmpty => string.IsNullOrWhiteSpace(Name);
+    public bool IsEmpty =>
+        string.IsNullOrWhiteSpace(Name) &&
+        string.IsNullOrWhiteSpace(Note);
 
     [JsonIgnore]
     public bool CanAddToToday => !string.IsNullOrWhiteSpace(Name);
@@ -1429,6 +1471,7 @@ public sealed class LongTermTask : INotifyPropertyChanged
     public void Normalize()
     {
         Name ??= string.Empty;
+        Note ??= string.Empty;
         SetProgress(Progress);
     }
 
@@ -1497,6 +1540,7 @@ public sealed class LongTermTask : INotifyPropertyChanged
 public sealed class PlanTask : INotifyPropertyChanged
 {
     private string _name = string.Empty;
+    private string _note = string.Empty;
     private string _plannedText = string.Empty;
     private int _plannedHours;
     private int _plannedMinutes;
@@ -1547,6 +1591,22 @@ public sealed class PlanTask : INotifyPropertyChanged
             }
 
             NotifyPlannedChanged();
+        }
+    }
+
+    public string Note
+    {
+        get => _note;
+        set
+        {
+            if (_note == value)
+            {
+                return;
+            }
+
+            _note = value ?? string.Empty;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(IsEmpty));
         }
     }
 
@@ -1644,6 +1704,7 @@ public sealed class PlanTask : INotifyPropertyChanged
     [JsonIgnore]
     public bool IsEmpty =>
         string.IsNullOrWhiteSpace(Name) &&
+        string.IsNullOrWhiteSpace(Note) &&
         PlannedTotalMinutes <= 0 &&
         string.IsNullOrWhiteSpace(_plannedText) &&
         ActualMinutes <= 0;
@@ -1657,6 +1718,7 @@ public sealed class PlanTask : INotifyPropertyChanged
     public void Normalize()
     {
         Name ??= string.Empty;
+        Note ??= string.Empty;
         PlannedText ??= string.Empty;
 
         if (PlannedTotalMinutes <= 0)
