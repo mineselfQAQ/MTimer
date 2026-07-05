@@ -509,17 +509,89 @@
                                 </ScrollViewer>
                             </Border>
 
-                            <TextBlock Grid.Row="3"
-                                       Text="总结"
-                                       FontSize="15"
-                                       FontWeight="SemiBold"
-                                       Foreground="#F5F1EB"
-                                       HorizontalAlignment="Left"
-                                       Margin="0,18,0,8"/>
-                            <TextBox x:Name="SummaryBox"
-                                     Grid.Row="4"
-                                     Style="{StaticResource PanelTextBox}"
-                                     TextChanged="EntryTextChanged"/>
+                            <Grid Grid.Row="3" Margin="0,18,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="长期任务"
+                                           FontSize="15"
+                                           FontWeight="SemiBold"
+                                           Foreground="#F5F1EB"
+                                           HorizontalAlignment="Left"
+                                           VerticalAlignment="Center"/>
+                                <Button x:Name="AddLongTaskBtn"
+                                        Grid.Column="1"
+                                        Content="+ 添加"
+                                        Click="AddLongTaskBtn_Click"
+                                        Style="{StaticResource ToolbarButton}"/>
+                            </Grid>
+                            <Border Grid.Row="4"
+                                    Background="#151B21"
+                                    BorderBrush="#3D4852"
+                                    BorderThickness="1">
+                                <ScrollViewer VerticalScrollBarVisibility="Hidden">
+                                    <ItemsControl x:Name="LongTaskItems"
+                                                  Margin="10">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Background="#1C242B"
+                                                        BorderBrush="#2F3A44"
+                                                        BorderThickness="1"
+                                                        Padding="8"
+                                                        Margin="0,0,0,8">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition/>
+                                                            <ColumnDefinition Width="46"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="40"/>
+                                                            <ColumnDefinition Width="30"/>
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                                                                 TextChanged="LongTaskTextChanged"
+                                                                 PreviewKeyDown="LongTaskInput_PreviewKeyDown"
+                                                                 Style="{StaticResource TaskTextBox}"/>
+                                                        <TextBox Grid.Column="1"
+                                                                 Text="{Binding ProgressText, UpdateSourceTrigger=PropertyChanged}"
+                                                                 MaxLength="3"
+                                                                 TextChanged="LongTaskTextChanged"
+                                                                 LostFocus="LongTaskProgressLostFocus"
+                                                                 PreviewKeyDown="LongTaskInput_PreviewKeyDown"
+                                                                 Style="{StaticResource TaskTimeTextBox}"
+                                                                 Margin="8,0,0,0"/>
+                                                        <TextBlock Grid.Column="2"
+                                                                   Text="%"
+                                                                   Style="{StaticResource TaskTimeUnitText}"/>
+                                                        <Button Grid.Column="3"
+                                                                Content="加入"
+                                                                Tag="{Binding}"
+                                                                Click="AddLongTaskToTodayBtn_Click"
+                                                                IsEnabled="{Binding CanAddToToday}"
+                                                                Style="{StaticResource ToolbarButton}"
+                                                                Width="36"
+                                                                Height="30"
+                                                                MinWidth="36"
+                                                                Padding="0"
+                                                                Margin="2,0,0,0"/>
+                                                        <Button Grid.Column="4"
+                                                                Content="x"
+                                                                Tag="{Binding}"
+                                                                Click="RemoveLongTaskBtn_Click"
+                                                                Style="{StaticResource ToolbarButton}"
+                                                                Width="24"
+                                                                Height="30"
+                                                                MinWidth="24"
+                                                                Padding="0"
+                                                                Margin="6,0,0,0"/>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </Border>
                         </Grid>
                     </Grid>
                 </Grid>

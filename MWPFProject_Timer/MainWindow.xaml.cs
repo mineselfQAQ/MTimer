@@ -27,6 +27,8 @@ public partial class MainWindow : Window
     private const double EXPANDED_HEIGHT = 650;
     private const string COUNT_FILE = "minute_count.txt";
     private const string PLAN_FILE = "daily_plans.json";
+    private const string LONG_TASK_FILE = "long_tasks.json";
+    private const string FREE_STUDY_TASK_NAME = "自由学习";
 
     private static readonly CultureInfo ZhCn = new("zh-CN");
     private static readonly TimeSpan DailyRefreshTime = TimeSpan.FromHours(4);
@@ -61,6 +63,7 @@ public partial class MainWindow : Window
 
     private readonly Dictionary<string, DailyEntry> _dailyEntries = new(StringComparer.Ordinal);
     private readonly ObservableCollection<PlanTask> _selectedTasks = new();
+    private readonly ObservableCollection<LongTermTask> _longTermTasks = new();
 
     private DispatcherTimer? _minuteTimer;
     private int _minuteCount;
@@ -70,6 +73,7 @@ public partial class MainWindow : Window
     private DateTime _selectedDate;
     private int _currentTaskIndex;
     private bool _isLoadingEntry = true;
+    private bool _isLoadingLongTermTasks;
     private bool _isUpdatingTotalPlan;
 
     public MainWindow()
@@ -80,9 +84,11 @@ public partial class MainWindow : Window
 
         InitializeComponent();
         PlanTaskItems.ItemsSource = _selectedTasks;
+        LongTaskItems.ItemsSource = _longTermTasks;
         InitializeTimer();
 
         LoadDailyEntries();
+        LoadLongTermTasks();
         ApplyLegacyCountToCurrentDate(LoadSavedCount());
         UpdateMinuteCountFromCurrentBusinessDate();
         UpdateCounterDisplay();
@@ -257,6 +263,48 @@ public partial class MainWindow : Window
         RefreshCurrentTaskDisplay();
     }
 
+    private void AddLongTaskBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _longTermTasks.Add(new LongTermTask());
+    }
+
+    private void RemoveLongTaskBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: LongTermTask task })
+        {
+            return;
+        }
+
+        _longTermTasks.Remove(task);
+        SaveLongTermTasks();
+    }
+
+    private void AddLongTaskToTodayBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: LongTermTask task } ||
+            string.IsNullOrWhiteSpace(task.Name))
+        {
+            return;
+        }
+
+        SaveSelectedEntry();
+
+        DateTime targetDate = _currentBusinessDate.Date;
+        DailyEntry entry = NormalizeEntry(GetEntry(targetDate, create: true)!);
+        entry.Tasks.Add(new PlanTask
+        {
+            Name = task.Name.Trim()
+        });
+        entry.Plan = BuildLegacyPlan(entry.Tasks);
+
+        _selectedDate = targetDate;
+        _displayMonth = new DateTime(targetDate.Year, targetDate.Month, 1);
+        SaveDailyEntries();
+        RenderCalendar();
+        LoadSelectedEntry();
+        RefreshCurrentTaskDisplay();
+    }
+
     private void PlanTaskTextChanged(object sender, TextChangedEventArgs e)
     {
         if (_isLoadingEntry)
@@ -272,6 +320,21 @@ public partial class MainWindow : Window
         SaveSelectedEntry();
         RenderCalendar();
         RefreshCurrentTaskDisplay();
+    }
+
+    private void LongTaskTextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_isLoadingLongTermTasks)
+        {
+            return;
+        }
+
+        if (sender is TextBox textBox)
+        {
+            textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+        }
+
+        SaveLongTermTasks();
     }
 
     private void TotalPlanTextChanged(object sender, TextChangedEventArgs e)
@@ -311,6 +374,28 @@ public partial class MainWindow : Window
         RefreshCurrentTaskDisplay();
     }
 
+    private void LongTaskInput_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter)
+        {
+            return;
+        }
+
+        e.Handled = true;
+
+        if (sender is TextBox textBox)
+        {
+            textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+            if (textBox.DataContext is LongTermTask task)
+            {
+                task.NormalizeProgress();
+            }
+        }
+
+        RootBorder.Focus();
+        SaveLongTermTasks();
+    }
+
     private void TotalPlanTimeLostFocus(object sender, RoutedEventArgs e)
     {
         if (_isLoadingEntry || _isUpdatingTotalPlan)
@@ -341,15 +426,17 @@ public partial class MainWindow : Window
         RefreshCurrentTaskDisplay();
     }
 
-    private void EntryTextChanged(object sender, TextChangedEventArgs e)
+    private void LongTaskProgressLostFocus(object sender, RoutedEventArgs e)
     {
-        if (_isLoadingEntry)
+        if (_isLoadingLongTermTasks ||
+            sender is not TextBox { DataContext: LongTermTask task } textBox)
         {
             return;
         }
 
-        SaveSelectedEntry();
-        RenderCalendar();
+        textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+        task.NormalizeProgress();
+        SaveLongTermTasks();
     }
 
     private void TaskUpBtn_Click(object sender, RoutedEventArgs e)
@@ -375,6 +462,7 @@ public partial class MainWindow : Window
     private void Window_Closing(object? sender, CancelEventArgs e)
     {
         SaveSelectedEntry();
+        SaveLongTermTasks();
         SaveCurrentCount();
         SaveDailyEntries();
     }
@@ -465,7 +553,6 @@ public partial class MainWindow : Window
         }
 
         SetTotalPlanInputs(GetEffectivePlannedMinutes(entry));
-        SummaryBox.Text = entry.Summary;
         SelectedDateTitle.Text = _selectedDate.ToString("yyyy年M月d日 dddd", ZhCn);
 
         AddTaskBtn.IsEnabled = planEditable;
@@ -473,9 +560,6 @@ public partial class MainWindow : Window
         TotalMinutesBox.IsReadOnly = !planEditable;
         TotalHoursBox.Opacity = planEditable ? 1 : 0.68;
         TotalMinutesBox.Opacity = planEditable ? 1 : 0.68;
-        bool summaryEditable = IsSummaryEditable(_selectedDate);
-        SummaryBox.IsReadOnly = !summaryEditable;
-        SummaryBox.Opacity = summaryEditable ? 1 : 0.68;
 
         _isLoadingEntry = false;
     }
@@ -576,6 +660,74 @@ public partial class MainWindow : Window
         }
     }
 
+    private void LoadLongTermTasks()
+    {
+        _isLoadingLongTermTasks = true;
+        try
+        {
+            _longTermTasks.Clear();
+            if (!File.Exists(LONG_TASK_FILE))
+            {
+                return;
+            }
+
+            string content = File.ReadAllText(LONG_TASK_FILE, Encoding.UTF8);
+            List<LongTermTask>? savedTasks = JsonSerializer.Deserialize<List<LongTermTask>>(content, JsonOptions);
+            if (savedTasks == null)
+            {
+                return;
+            }
+
+            foreach (LongTermTask task in savedTasks)
+            {
+                task.Normalize();
+                if (!task.IsEmpty)
+                {
+                    _longTermTasks.Add(task);
+                }
+            }
+        }
+        catch
+        {
+            _longTermTasks.Clear();
+        }
+        finally
+        {
+            _isLoadingLongTermTasks = false;
+        }
+    }
+
+    private void SaveLongTermTasks()
+    {
+        if (_isLoadingLongTermTasks)
+        {
+            return;
+        }
+
+        try
+        {
+            List<LongTermTask> tasksToSave = _longTermTasks
+                .Where(task => !task.IsEmpty)
+                .ToList();
+
+            if (tasksToSave.Count == 0)
+            {
+                if (File.Exists(LONG_TASK_FILE))
+                {
+                    File.Delete(LONG_TASK_FILE);
+                }
+
+                return;
+            }
+
+            string json = JsonSerializer.Serialize(tasksToSave, JsonOptions);
+            File.WriteAllText(LONG_TASK_FILE, json, Encoding.UTF8);
+        }
+        catch
+        {
+        }
+    }
+
     private void SaveSelectedEntry()
     {
         if (_isLoadingEntry)
@@ -602,7 +754,6 @@ public partial class MainWindow : Window
         entry.Tasks = visibleTasks;
         EnsureHiddenTask(entry, existingHiddenTask);
         entry.Plan = BuildLegacyPlan(entry.Tasks);
-        entry.Summary = SummaryBox.Text;
 
         if (IsEntryEmpty(entry))
         {
@@ -708,8 +859,8 @@ public partial class MainWindow : Window
         {
             _currentTaskIndex = 0;
             CurrentTaskName.Text = "未设置";
-            CurrentTaskState.Text = "无计划";
-            CurrentTaskState.Foreground = RemainingBrush;
+            CurrentTaskState.Text = $"已进行{FormatElapsedDuration(_minuteCount)}";
+            CurrentTaskState.Foreground = CompletedBrush;
             TaskUpBtn.IsEnabled = false;
             TaskDownBtn.IsEnabled = false;
             return;
@@ -721,7 +872,7 @@ public partial class MainWindow : Window
         }
 
         PlanTask task = tasks[_currentTaskIndex];
-        CurrentTaskName.Text = task.Name.Trim();
+        CurrentTaskName.Text = GetTaskDisplayName(task);
         RefreshCurrentTaskState(task);
         TaskUpBtn.IsEnabled = tasks.Count > 1;
         TaskDownBtn.IsEnabled = tasks.Count > 1;
@@ -732,8 +883,8 @@ public partial class MainWindow : Window
         int plannedMinutes = task.PlannedTotalMinutes;
         if (plannedMinutes <= 0)
         {
-            CurrentTaskState.Text = "未设置时长";
-            CurrentTaskState.Foreground = RemainingBrush;
+            CurrentTaskState.Text = $"已进行{FormatElapsedDuration(task.ActualMinutes)}";
+            CurrentTaskState.Foreground = CompletedBrush;
             return;
         }
 
@@ -769,7 +920,7 @@ public partial class MainWindow : Window
     {
         DailyEntry? entry = GetEntry(_currentBusinessDate, create: false);
         return entry?.Tasks
-            .Where(task => !string.IsNullOrWhiteSpace(task.Name))
+            .Where(task => !task.IsEmpty)
             .ToList() ?? new List<PlanTask>();
     }
 
@@ -796,7 +947,7 @@ public partial class MainWindow : Window
             displayMinutes = entry.ActualMinutes > 0 ? entry.ActualMinutes : plannedMinutes;
         }
 
-        return FormatCompactHours(displayMinutes);
+        return FormatCompactDuration(displayMinutes);
     }
 
     private DailyEntry? GetEntry(DateTime date, bool create)
@@ -826,11 +977,6 @@ public partial class MainWindow : Window
     private bool IsPlanEditable(DateTime date)
     {
         return date.Date >= _currentBusinessDate.Date;
-    }
-
-    private bool IsSummaryEditable(DateTime date)
-    {
-        return date.Date == _currentBusinessDate.Date;
     }
 
     private static CalendarDayViewModel CreateCalendarDay(
@@ -932,7 +1078,6 @@ public partial class MainWindow : Window
     {
         return entry.ActualMinutes <= 0 &&
                entry.TotalPlannedMinutes <= 0 &&
-               string.IsNullOrWhiteSpace(entry.Summary) &&
                entry.Tasks.All(task => task.IsEmpty);
     }
 
@@ -942,8 +1087,8 @@ public partial class MainWindow : Window
             Environment.NewLine,
             tasks.Where(task => !task.IsHidden).Select(task =>
                 string.IsNullOrWhiteSpace(task.PlannedText)
-                    ? task.Name.Trim()
-                    : $"{task.Name.Trim()} {task.PlannedText.Trim()}"));
+                    ? GetTaskDisplayName(task)
+                    : $"{GetTaskDisplayName(task)} {task.PlannedText.Trim()}"));
     }
 
     private static PlanTask CreateTaskFromLegacyLine(string legacyLine)
@@ -1000,7 +1145,7 @@ public partial class MainWindow : Window
 
         PlanTask hiddenTask = new()
         {
-            Name = "预留时间",
+            Name = FREE_STUDY_TASK_NAME,
             IsHidden = true,
             ActualMinutes = existingHiddenTask?.ActualMinutes ?? 0
         };
@@ -1117,15 +1262,37 @@ public partial class MainWindow : Window
         return $"{hours:00}:{remainingMinutes:00}";
     }
 
-    private static string FormatCompactHours(int minutes)
+    private static string FormatElapsedDuration(int minutes)
+    {
+        return minutes > 0 ? FormatDuration(minutes) : "0分钟";
+    }
+
+    private static string GetTaskDisplayName(PlanTask task)
+    {
+        string taskName = task.Name.Trim();
+        return string.IsNullOrWhiteSpace(taskName) ? FREE_STUDY_TASK_NAME : taskName;
+    }
+
+    private static string FormatCompactDuration(int minutes)
     {
         if (minutes <= 0)
         {
             return string.Empty;
         }
 
-        double hours = Math.Round(minutes / 60.0, 2);
-        return hours.ToString("0.##", CultureInfo.InvariantCulture);
+        int hours = minutes / 60;
+        int remainingMinutes = minutes % 60;
+        if (hours > 0 && remainingMinutes > 0)
+        {
+            return $"{hours}h{remainingMinutes}m";
+        }
+
+        if (hours > 0)
+        {
+            return $"{hours}h";
+        }
+
+        return $"{remainingMinutes}m";
     }
 
     internal static string FormatDuration(int minutes)
@@ -1197,6 +1364,134 @@ public sealed class DailyEntry
     public int ActualMinutes { get; set; }
 
     public List<PlanTask> Tasks { get; set; } = new();
+}
+
+public sealed class LongTermTask : INotifyPropertyChanged
+{
+    private string _name = string.Empty;
+    private int _progress;
+    private string _progressText = "0";
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    public string Name
+    {
+        get => _name;
+        set
+        {
+            if (_name == value)
+            {
+                return;
+            }
+
+            _name = value ?? string.Empty;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(IsEmpty));
+            OnPropertyChanged(nameof(CanAddToToday));
+        }
+    }
+
+    public int Progress
+    {
+        get => _progress;
+        set => SetProgress(value);
+    }
+
+    [JsonIgnore]
+    public string ProgressText
+    {
+        get => _progressText;
+        set
+        {
+            string cleanedValue = KeepDigits(value);
+            int progress = ClampProgress(ParseNonNegativeInt(cleanedValue));
+            string nextText = string.IsNullOrWhiteSpace(cleanedValue)
+                ? string.Empty
+                : progress.ToString(CultureInfo.InvariantCulture);
+
+            if (_progress == progress && _progressText == nextText)
+            {
+                return;
+            }
+
+            _progress = progress;
+            _progressText = nextText;
+            NotifyProgressChanged();
+        }
+    }
+
+    [JsonIgnore]
+    public bool IsEmpty => string.IsNullOrWhiteSpace(Name);
+
+    [JsonIgnore]
+    public bool CanAddToToday => !string.IsNullOrWhiteSpace(Name);
+
+    public void Normalize()
+    {
+        Name ??= string.Empty;
+        SetProgress(Progress);
+    }
+
+    public void NormalizeProgress()
+    {
+        SetProgress(Progress);
+    }
+
+    private void SetProgress(int progress)
+    {
+        int safeProgress = ClampProgress(progress);
+        string nextText = safeProgress.ToString(CultureInfo.InvariantCulture);
+        if (_progress == safeProgress && _progressText == nextText)
+        {
+            return;
+        }
+
+        _progress = safeProgress;
+        _progressText = nextText;
+        NotifyProgressChanged();
+    }
+
+    private void NotifyProgressChanged()
+    {
+        OnPropertyChanged(nameof(Progress));
+        OnPropertyChanged(nameof(ProgressText));
+    }
+
+    private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+    {
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    }
+
+    private static int ClampProgress(int progress)
+    {
+        return Math.Clamp(progress, 0, 100);
+    }
+
+    private static int ParseNonNegativeInt(string value)
+    {
+        return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsedValue)
+            ? Math.Max(0, parsedValue)
+            : 0;
+    }
+
+    private static string KeepDigits(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        StringBuilder builder = new();
+        foreach (char character in value)
+        {
+            if (char.IsDigit(character))
+            {
+                builder.Append(character);
+            }
+        }
+
+        return builder.ToString();
+    }
 }
 
 public sealed class PlanTask : INotifyPropertyChanged
