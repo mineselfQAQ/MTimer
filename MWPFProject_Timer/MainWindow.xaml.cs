@@ -393,6 +393,7 @@ public partial class MainWindow : Window
 
         if (expanded)
         {
+            CenterWindowInWorkArea();
             RenderCalendar();
             LoadSelectedEntry();
         }
@@ -415,6 +416,13 @@ public partial class MainWindow : Window
         MinHeight = height;
         MaxWidth = width;
         MaxHeight = height;
+    }
+
+    private void CenterWindowInWorkArea()
+    {
+        Rect workArea = SystemParameters.WorkArea;
+        Left = workArea.Left + ((workArea.Width - Width) / 2);
+        Top = workArea.Top + ((workArea.Height - Height) / 2);
     }
 
     private void RenderCalendar()
