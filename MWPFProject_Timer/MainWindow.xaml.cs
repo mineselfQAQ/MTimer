@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
@@ -10,6 +11,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 
@@ -29,6 +31,8 @@ public partial class MainWindow : Window
     private const string PLAN_FILE = "daily_plans.json";
     private const string LONG_TASK_FILE = "long_tasks.json";
     private const string FREE_STUDY_TASK_NAME = "自由学习";
+    private const string UNNAMED_TASK_PREFIX = "未命名任务";
+    private const int MONITOR_DEFAULTTONEAREST = 2;
 
     private static readonly CultureInfo ZhCn = new("zh-CN");
     private static readonly TimeSpan DailyRefreshTime = TimeSpan.FromHours(4);
@@ -427,6 +431,52 @@ public partial class MainWindow : Window
         RefreshCurrentTaskDisplay();
     }
 
+    private void PlanTaskNote_PreviewMouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not TextBox { DataContext: PlanTask task } textBox ||
+            !task.BeginNoteEdit())
+        {
+            return;
+        }
+
+        textBox.IsReadOnly = false;
+        textBox.Focus();
+        textBox.SelectAll();
+        e.Handled = true;
+    }
+
+    private void PlanTaskNote_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        CommitPlanTaskNote(sender as TextBox);
+        RootBorder.Focus();
+    }
+
+    private void PlanTaskNote_LostFocus(object sender, RoutedEventArgs e)
+    {
+        CommitPlanTaskNote(sender as TextBox);
+    }
+
+    private void CommitPlanTaskNote(TextBox? textBox)
+    {
+        if (_isLoadingEntry ||
+            textBox is not { DataContext: PlanTask task })
+        {
+            return;
+        }
+
+        textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+        task.EndNoteEdit();
+        SaveSelectedEntry();
+        RenderCalendar();
+        RefreshCurrentTaskDisplay();
+    }
+
     private void LongTaskProgressLostFocus(object sender, RoutedEventArgs e)
     {
         if (_isLoadingLongTermTasks ||
@@ -437,6 +487,50 @@ public partial class MainWindow : Window
 
         textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
         task.NormalizeProgress();
+        SaveLongTermTasks();
+    }
+
+    private void LongTaskNote_PreviewMouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not TextBox { DataContext: LongTermTask task } textBox)
+        {
+            return;
+        }
+
+        task.BeginNoteEdit();
+        textBox.IsReadOnly = false;
+        textBox.Focus();
+        textBox.SelectAll();
+        e.Handled = true;
+    }
+
+    private void LongTaskNote_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        CommitLongTaskNote(sender as TextBox);
+        RootBorder.Focus();
+    }
+
+    private void LongTaskNote_LostFocus(object sender, RoutedEventArgs e)
+    {
+        CommitLongTaskNote(sender as TextBox);
+    }
+
+    private void CommitLongTaskNote(TextBox? textBox)
+    {
+        if (_isLoadingLongTermTasks ||
+            textBox is not { DataContext: LongTermTask task })
+        {
+            return;
+        }
+
+        textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+        task.EndNoteEdit();
         SaveLongTermTasks();
     }
 
@@ -518,12 +612,44 @@ public partial class MainWindow : Window
 
     private void PositionWindowAroundCenter(Point center)
     {
-        Rect workArea = SystemParameters.WorkArea;
+        Rect workArea = GetWorkAreaForCenter(center);
         double left = center.X - (Width / 2);
         double top = center.Y - (Height / 2);
 
         Left = ClampWindowCoordinate(left, workArea.Left, workArea.Right - Width);
         Top = ClampWindowCoordinate(top, workArea.Top, workArea.Bottom - Height);
+    }
+
+    private Rect GetWorkAreaForCenter(Point center)
+    {
+        PresentationSource? source = PresentationSource.FromVisual(this);
+        Matrix toDevice = source?.CompositionTarget?.TransformToDevice ?? Matrix.Identity;
+        Matrix fromDevice = source?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
+        Point deviceCenter = toDevice.Transform(center);
+
+        NativePoint nativePoint = new()
+        {
+            X = (int)Math.Round(deviceCenter.X),
+            Y = (int)Math.Round(deviceCenter.Y)
+        };
+        IntPtr monitor = MonitorFromPoint(nativePoint, MONITOR_DEFAULTTONEAREST);
+        if (monitor == IntPtr.Zero)
+        {
+            return SystemParameters.WorkArea;
+        }
+
+        MonitorInfo monitorInfo = new()
+        {
+            Size = Marshal.SizeOf<MonitorInfo>()
+        };
+        if (!GetMonitorInfo(monitor, ref monitorInfo))
+        {
+            return SystemParameters.WorkArea;
+        }
+
+        Point topLeft = fromDevice.Transform(new Point(monitorInfo.WorkArea.Left, monitorInfo.WorkArea.Top));
+        Point bottomRight = fromDevice.Transform(new Point(monitorInfo.WorkArea.Right, monitorInfo.WorkArea.Bottom));
+        return new Rect(topLeft, bottomRight);
     }
 
     private static double ClampWindowCoordinate(double value, double min, double max)
@@ -534,6 +660,44 @@ public partial class MainWindow : Window
         }
 
         return Math.Clamp(value, min, max);
+    }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromPoint(NativePoint point, int flags);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    private static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfo monitorInfo);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint
+    {
+        public int X;
+
+        public int Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+    private struct MonitorInfo
+    {
+        public int Size;
+
+        public NativeRect MonitorArea;
+
+        public NativeRect WorkArea;
+
+        public int Flags;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect
+    {
+        public int Left;
+
+        public int Top;
+
+        public int Right;
+
+        public int Bottom;
     }
 
     private void RenderCalendar()
@@ -881,7 +1045,7 @@ public partial class MainWindow : Window
         if (tasks.Count == 0)
         {
             _currentTaskIndex = 0;
-            CurrentTaskName.Text = "未设置";
+            CurrentTaskName.Text = FREE_STUDY_TASK_NAME;
             CurrentTaskState.Text = $"已进行{FormatElapsedDuration(_minuteCount)}";
             CurrentTaskState.Foreground = CompletedBrush;
             TaskUpBtn.IsEnabled = false;
@@ -895,7 +1059,7 @@ public partial class MainWindow : Window
         }
 
         PlanTask task = tasks[_currentTaskIndex];
-        CurrentTaskName.Text = GetTaskDisplayName(task);
+        CurrentTaskName.Text = GetTaskDisplayName(task, _currentTaskIndex);
         RefreshCurrentTaskState(task);
         TaskUpBtn.IsEnabled = tasks.Count > 1;
         TaskDownBtn.IsEnabled = tasks.Count > 1;
@@ -1108,10 +1272,10 @@ public partial class MainWindow : Window
     {
         return string.Join(
             Environment.NewLine,
-            tasks.Where(task => !task.IsHidden).Select(task =>
+            tasks.Where(task => !task.IsHidden).Select((task, index) =>
                 string.IsNullOrWhiteSpace(task.PlannedText)
-                    ? GetTaskDisplayName(task)
-                    : $"{GetTaskDisplayName(task)} {task.PlannedText.Trim()}"));
+                    ? GetTaskDisplayName(task, index)
+                    : $"{GetTaskDisplayName(task, index)} {task.PlannedText.Trim()}"));
     }
 
     private static PlanTask CreateTaskFromLegacyLine(string legacyLine)
@@ -1168,7 +1332,6 @@ public partial class MainWindow : Window
 
         PlanTask hiddenTask = new()
         {
-            Name = FREE_STUDY_TASK_NAME,
             IsHidden = true,
             ActualMinutes = existingHiddenTask?.ActualMinutes ?? 0
         };
@@ -1290,10 +1453,12 @@ public partial class MainWindow : Window
         return minutes > 0 ? FormatDuration(minutes) : "0分钟";
     }
 
-    private static string GetTaskDisplayName(PlanTask task)
+    private static string GetTaskDisplayName(PlanTask task, int index)
     {
         string taskName = task.Name.Trim();
-        return string.IsNullOrWhiteSpace(taskName) ? FREE_STUDY_TASK_NAME : taskName;
+        return string.IsNullOrWhiteSpace(taskName)
+            ? $"{UNNAMED_TASK_PREFIX}{index + 1:00}"
+            : taskName;
     }
 
     private static string FormatCompactDuration(int minutes)
@@ -1393,6 +1558,7 @@ public sealed class LongTermTask : INotifyPropertyChanged
 {
     private string _name = string.Empty;
     private string _note = string.Empty;
+    private bool _isNoteEditing;
     private int _progress;
     private string _progressText = "0";
 
@@ -1468,16 +1634,42 @@ public sealed class LongTermTask : INotifyPropertyChanged
     [JsonIgnore]
     public bool CanAddToToday => !string.IsNullOrWhiteSpace(Name);
 
+    [JsonIgnore]
+    public bool IsNoteReadOnly => !_isNoteEditing;
+
     public void Normalize()
     {
         Name ??= string.Empty;
         Note ??= string.Empty;
+        EndNoteEdit();
         SetProgress(Progress);
     }
 
     public void NormalizeProgress()
     {
         SetProgress(Progress);
+    }
+
+    public void BeginNoteEdit()
+    {
+        if (_isNoteEditing)
+        {
+            return;
+        }
+
+        _isNoteEditing = true;
+        OnPropertyChanged(nameof(IsNoteReadOnly));
+    }
+
+    public void EndNoteEdit()
+    {
+        if (!_isNoteEditing)
+        {
+            return;
+        }
+
+        _isNoteEditing = false;
+        OnPropertyChanged(nameof(IsNoteReadOnly));
     }
 
     private void SetProgress(int progress)
@@ -1548,6 +1740,7 @@ public sealed class PlanTask : INotifyPropertyChanged
     private string _plannedMinutesText = string.Empty;
     private int _actualMinutes;
     private bool _isReadOnly;
+    private bool _isNoteEditing;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -1652,13 +1845,22 @@ public sealed class PlanTask : INotifyPropertyChanged
             }
 
             _isReadOnly = value;
+            if (_isReadOnly)
+            {
+                _isNoteEditing = false;
+            }
+
             OnPropertyChanged();
             OnPropertyChanged(nameof(CanEdit));
+            OnPropertyChanged(nameof(IsNoteReadOnly));
         }
     }
 
     [JsonIgnore]
     public bool CanEdit => !IsReadOnly;
+
+    [JsonIgnore]
+    public bool IsNoteReadOnly => IsReadOnly || !_isNoteEditing;
 
     [JsonIgnore]
     public string PlannedHoursText
@@ -1720,6 +1922,7 @@ public sealed class PlanTask : INotifyPropertyChanged
         Name ??= string.Empty;
         Note ??= string.Empty;
         PlannedText ??= string.Empty;
+        EndNoteEdit();
 
         if (PlannedTotalMinutes <= 0)
         {
@@ -1737,6 +1940,33 @@ public sealed class PlanTask : INotifyPropertyChanged
     public void NormalizePlannedTime()
     {
         SetPlannedFromMinutes(PlannedTotalMinutes);
+    }
+
+    public bool BeginNoteEdit()
+    {
+        if (IsReadOnly)
+        {
+            return false;
+        }
+
+        if (!_isNoteEditing)
+        {
+            _isNoteEditing = true;
+            OnPropertyChanged(nameof(IsNoteReadOnly));
+        }
+
+        return true;
+    }
+
+    public void EndNoteEdit()
+    {
+        if (!_isNoteEditing)
+        {
+            return;
+        }
+
+        _isNoteEditing = false;
+        OnPropertyChanged(nameof(IsNoteReadOnly));
     }
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
