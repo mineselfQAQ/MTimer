@@ -211,10 +211,6 @@
                                 Content="停"
                                 Click="StopBtn_Click"
                                 Style="{StaticResource MiniButton}"/>
-                        <Button x:Name="ResetBtn"
-                                Content="重"
-                                Click="ResetBtn_Click"
-                                Style="{StaticResource MiniButton}"/>
                         <Button x:Name="ExpandBtn"
                                 Content="展"
                                 Click="ExpandBtn_Click"
@@ -441,7 +437,6 @@
                                                         <Grid.RowDefinitions>
                                                             <RowDefinition Height="Auto"/>
                                                             <RowDefinition Height="Auto"/>
-                                                            <RowDefinition Height="Auto"/>
                                                         </Grid.RowDefinitions>
                                                         <Grid.ColumnDefinitions>
                                                             <ColumnDefinition/>
@@ -449,18 +444,18 @@
                                                             <ColumnDefinition Width="Auto"/>
                                                             <ColumnDefinition Width="38"/>
                                                             <ColumnDefinition Width="Auto"/>
-                                                            <ColumnDefinition Width="30"/>
+                                                            <ColumnDefinition Width="46"/>
                                                         </Grid.ColumnDefinitions>
 
                                                         <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
-                                                                 IsReadOnly="{Binding IsReadOnly}"
+                                                                 IsReadOnly="{Binding IsInputReadOnly}"
                                                                  TextChanged="PlanTaskTextChanged"
                                                                  PreviewKeyDown="PlanTaskInput_PreviewKeyDown"
                                                                  Style="{StaticResource TaskTextBox}"/>
 
                                                         <TextBox Grid.Column="1"
                                                                  Text="{Binding PlannedHoursText, UpdateSourceTrigger=PropertyChanged}"
-                                                                 IsReadOnly="{Binding IsReadOnly}"
+                                                                 IsReadOnly="{Binding IsInputReadOnly}"
                                                                  MaxLength="2"
                                                                  TextChanged="PlanTaskTextChanged"
                                                                  LostFocus="PlanTaskTimeLostFocus"
@@ -472,7 +467,7 @@
                                                                    Style="{StaticResource TaskTimeUnitText}"/>
                                                         <TextBox Grid.Column="3"
                                                                  Text="{Binding PlannedMinutesText, UpdateSourceTrigger=PropertyChanged}"
-                                                                 IsReadOnly="{Binding IsReadOnly}"
+                                                                 IsReadOnly="{Binding IsInputReadOnly}"
                                                                  MaxLength="2"
                                                                  TextChanged="PlanTaskTextChanged"
                                                                  LostFocus="PlanTaskTimeLostFocus"
@@ -487,31 +482,34 @@
                                                                 Tag="{Binding}"
                                                                 Click="RemoveTaskBtn_Click"
                                                                 IsEnabled="{Binding CanEdit}"
+                                                                Visibility="{Binding RemoveButtonVisibility}"
                                                                 Style="{StaticResource ToolbarButton}"
                                                                 Width="24"
                                                                 Height="30"
                                                                 MinWidth="24"
                                                                 Padding="0"
                                                                 Margin="6,0,0,0"/>
-                                                        <TextBox Grid.Row="1"
-                                                                 Grid.Column="0"
-                                                                 Grid.ColumnSpan="6"
-                                                                 Text="{Binding Note, UpdateSourceTrigger=Explicit}"
-                                                                 IsReadOnly="{Binding IsNoteReadOnly}"
-                                                                 PreviewMouseDoubleClick="PlanTaskNote_PreviewMouseDoubleClick"
-                                                                 PreviewKeyDown="PlanTaskNote_PreviewKeyDown"
-                                                                 LostFocus="PlanTaskNote_LostFocus"
-                                                                 Style="{StaticResource TaskTextBox}"
-                                                                 Margin="0,8,0,0"/>
-                                                        <TextBlock Grid.Row="2"
-                                                                   Grid.Column="1"
-                                                                   Grid.ColumnSpan="4"
+                                                        <Button Grid.Column="5"
+                                                                Content="归入"
+                                                                Tag="{Binding}"
+                                                                Click="TransferFreeTaskBtn_Click"
+                                                                IsEnabled="{Binding CanTransferFreeTime}"
+                                                                Visibility="{Binding TransferButtonVisibility}"
+                                                                Style="{StaticResource ToolbarButton}"
+                                                                Width="36"
+                                                                Height="30"
+                                                                MinWidth="36"
+                                                                Padding="0"
+                                                                Margin="6,0,0,0"/>
+                                                        <TextBlock Grid.Row="1"
+                                                                   Grid.Column="0"
+                                                                   Grid.ColumnSpan="6"
                                                                    Text="{Binding ActualDisplay}"
                                                                    Visibility="{Binding ActualVisibility}"
-                                                                   Foreground="#8FA0AF"
+                                                                   Foreground="{Binding ActualForeground}"
                                                                    FontSize="11"
-                                                                   HorizontalAlignment="Right"
-                                                                   Margin="0,4,8,0"/>
+                                                                   HorizontalAlignment="Left"
+                                                                   Margin="0,4,0,0"/>
                                                     </Grid>
                                                 </Border>
                                             </DataTemplate>

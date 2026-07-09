@@ -30,7 +30,7 @@ public partial class MainWindow : Window
     private const string COUNT_FILE = "minute_count.txt";
     private const string PLAN_FILE = "daily_plans.json";
     private const string LONG_TASK_FILE = "long_tasks.json";
-    private const string FREE_STUDY_TASK_NAME = "自由学习";
+    internal const string FREE_STUDY_TASK_NAME = "自由学习";
     private const string UNNAMED_TASK_PREFIX = "未命名任务";
     private const int MONITOR_DEFAULTTONEAREST = 2;
 
@@ -80,6 +80,8 @@ public partial class MainWindow : Window
     private bool _isLoadingLongTermTasks;
     private bool _isUpdatingTotalPlan;
 
+    private sealed record FreeTaskTransfer(PlanTask FreeTask, PlanTask TargetTask);
+
     public MainWindow()
     {
         _currentBusinessDate = GetBusinessDate(DateTime.Now);
@@ -118,11 +120,13 @@ public partial class MainWindow : Window
         _minuteCount = entry.ActualMinutes;
 
         PlanTask? activeTask = GetCurrentTask();
-        bool shouldStopForCompletedTask = false;
-        if (activeTask != null)
+        PlanTask trackedTask = GetTaskForCurrentTick(entry, activeTask);
+        trackedTask.ActualMinutes++;
+        EnsureSelectedTaskVisible(trackedTask);
+
+        if (trackedTask.IsFreeTask || IsTaskCompleted(trackedTask))
         {
-            activeTask.ActualMinutes++;
-            shouldStopForCompletedTask = IsTaskCompleted(activeTask);
+            SelectCurrentFreeTask();
         }
 
         UpdateCounterDisplay();
@@ -130,12 +134,6 @@ public partial class MainWindow : Window
         SaveDailyEntries();
         RenderCalendar();
         RefreshCurrentTaskDisplay();
-
-        if (shouldStopForCompletedTask)
-        {
-            _minuteTimer?.Stop();
-            SetIndicator(StoppedBrush);
-        }
     }
 
     private void StartBtn_Click(object sender, RoutedEventArgs e)
@@ -148,8 +146,7 @@ public partial class MainWindow : Window
 
             if (IsTaskCompleted(GetCurrentTask()))
             {
-                RefreshCurrentTaskDisplay();
-                return;
+                SelectCurrentFreeTask();
             }
 
             _minuteTimer.Start();
@@ -166,34 +163,6 @@ public partial class MainWindow : Window
 
             SaveCurrentCount();
             SaveDailyEntries();
-        }
-    }
-
-    private void ResetBtn_Click(object sender, RoutedEventArgs e)
-    {
-        _minuteTimer?.Stop();
-        RefreshBusinessDateIfNeeded();
-
-        DailyEntry? entry = GetEntry(_currentBusinessDate, create: false);
-        if (entry != null)
-        {
-            entry.ActualMinutes = 0;
-            foreach (PlanTask task in entry.Tasks)
-            {
-                task.ActualMinutes = 0;
-            }
-        }
-
-        _minuteCount = 0;
-        UpdateCounterDisplay();
-        SetIndicator(IdleBrush);
-        RenderCalendar();
-        RefreshCurrentTaskDisplay();
-        SaveDailyEntries();
-
-        if (File.Exists(COUNT_FILE))
-        {
-            File.Delete(COUNT_FILE);
         }
     }
 
@@ -256,7 +225,8 @@ public partial class MainWindow : Window
     private void RemoveTaskBtn_Click(object sender, RoutedEventArgs e)
     {
         if (!IsPlanEditable(_selectedDate) ||
-            sender is not Button { Tag: PlanTask task })
+            sender is not Button { Tag: PlanTask task } ||
+            task.IsFreeTask)
         {
             return;
         }
@@ -265,6 +235,77 @@ public partial class MainWindow : Window
         SaveSelectedEntry();
         RenderCalendar();
         RefreshCurrentTaskDisplay();
+    }
+
+    private void TransferFreeTaskBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (!IsPlanEditable(_selectedDate) ||
+            sender is not Button { Tag: PlanTask freeTask } button ||
+            !freeTask.IsFreeTask ||
+            freeTask.ActualMinutes <= 0)
+        {
+            return;
+        }
+
+        List<PlanTask> targetTasks = _selectedTasks
+            .Where(task => !task.IsFreeTask && !task.IsHidden && !task.IsEmpty)
+            .ToList();
+        if (targetTasks.Count == 0)
+        {
+            return;
+        }
+
+        ContextMenu menu = new()
+        {
+            PlacementTarget = button,
+            Placement = PlacementMode.Bottom
+        };
+
+        for (int i = 0; i < targetTasks.Count; i++)
+        {
+            PlanTask targetTask = targetTasks[i];
+            MenuItem item = new()
+            {
+                Header = GetTaskDisplayName(targetTask, i),
+                Tag = new FreeTaskTransfer(freeTask, targetTask)
+            };
+            item.Click += TransferFreeTaskMenuItem_Click;
+            menu.Items.Add(item);
+        }
+
+        button.ContextMenu = menu;
+        menu.IsOpen = true;
+    }
+
+    private void TransferFreeTaskMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: FreeTaskTransfer transfer } ||
+            transfer.FreeTask.ActualMinutes <= 0)
+        {
+            return;
+        }
+
+        transfer.TargetTask.ActualMinutes += transfer.FreeTask.ActualMinutes;
+        transfer.FreeTask.ActualMinutes = 0;
+        _selectedTasks.Remove(transfer.FreeTask);
+
+        SaveSelectedEntry();
+        RenderCalendar();
+        RefreshCurrentTaskDisplay();
+    }
+
+    private void EnsureSelectedTaskVisible(PlanTask task)
+    {
+        if (_selectedDate.Date != _currentBusinessDate.Date ||
+            task.IsHidden ||
+            task.IsEmpty ||
+            _selectedTasks.Contains(task))
+        {
+            return;
+        }
+
+        task.IsReadOnly = !IsPlanEditable(_selectedDate);
+        _selectedTasks.Add(task);
     }
 
     private void AddLongTaskBtn_Click(object sender, RoutedEventArgs e)
@@ -297,8 +338,7 @@ public partial class MainWindow : Window
         DailyEntry entry = NormalizeEntry(GetEntry(targetDate, create: true)!);
         entry.Tasks.Add(new PlanTask
         {
-            Name = task.Name.Trim(),
-            Note = task.Note.Trim()
+            Name = task.Name.Trim()
         });
         entry.Plan = BuildLegacyPlan(entry.Tasks);
 
@@ -418,7 +458,7 @@ public partial class MainWindow : Window
     {
         if (_isLoadingEntry ||
             sender is not TextBox { DataContext: PlanTask task } textBox ||
-            task.IsReadOnly)
+            task.IsInputReadOnly)
         {
             return;
         }
@@ -426,52 +466,6 @@ public partial class MainWindow : Window
         textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
         task.NormalizePlannedTime();
 
-        SaveSelectedEntry();
-        RenderCalendar();
-        RefreshCurrentTaskDisplay();
-    }
-
-    private void PlanTaskNote_PreviewMouseDoubleClick(object sender, MouseButtonEventArgs e)
-    {
-        if (sender is not TextBox { DataContext: PlanTask task } textBox ||
-            !task.BeginNoteEdit())
-        {
-            return;
-        }
-
-        textBox.IsReadOnly = false;
-        textBox.Focus();
-        textBox.SelectAll();
-        e.Handled = true;
-    }
-
-    private void PlanTaskNote_PreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.Key != Key.Enter)
-        {
-            return;
-        }
-
-        e.Handled = true;
-        CommitPlanTaskNote(sender as TextBox);
-        RootBorder.Focus();
-    }
-
-    private void PlanTaskNote_LostFocus(object sender, RoutedEventArgs e)
-    {
-        CommitPlanTaskNote(sender as TextBox);
-    }
-
-    private void CommitPlanTaskNote(TextBox? textBox)
-    {
-        if (_isLoadingEntry ||
-            textBox is not { DataContext: PlanTask task })
-        {
-            return;
-        }
-
-        textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
-        task.EndNoteEdit();
         SaveSelectedEntry();
         RenderCalendar();
         RefreshCurrentTaskDisplay();
@@ -733,7 +727,7 @@ public partial class MainWindow : Window
 
         _selectedTasks.Clear();
         bool planEditable = IsPlanEditable(_selectedDate);
-        foreach (PlanTask task in entry.Tasks.Where(task => !task.IsHidden))
+        foreach (PlanTask task in entry.Tasks.Where(task => !task.IsHidden && !task.IsEmpty))
         {
             task.IsReadOnly = !planEditable;
             _selectedTasks.Add(task);
@@ -786,6 +780,10 @@ public partial class MainWindow : Window
         if (entry.ActualMinutes <= 0)
         {
             entry.ActualMinutes = savedCount;
+            if (entry.Tasks.All(task => task.ActualMinutes <= 0))
+            {
+                EnsureFreeTask(entry).ActualMinutes = savedCount;
+            }
         }
     }
 
@@ -927,7 +925,7 @@ public partial class MainWindow : Window
         PlanTask? existingHiddenTask = entry.Tasks.FirstOrDefault(task => task.IsHidden);
 
         List<PlanTask> visibleTasks = _selectedTasks
-            .Where(task => !task.IsEmpty)
+            .Where(task => !task.IsHidden && !task.IsEmpty)
             .ToList();
         int visiblePlannedMinutes = visibleTasks.Sum(task => task.PlannedTotalMinutes);
         int totalPlannedMinutes = ReadTotalPlanMinutes();
@@ -1067,6 +1065,13 @@ public partial class MainWindow : Window
 
     private void RefreshCurrentTaskState(PlanTask task)
     {
+        if (task.IsFreeTask)
+        {
+            CurrentTaskState.Text = $"已进行{FormatElapsedDuration(task.ActualMinutes)}";
+            CurrentTaskState.Foreground = CompletedBrush;
+            return;
+        }
+
         int plannedMinutes = task.PlannedTotalMinutes;
         if (plannedMinutes <= 0)
         {
@@ -1106,9 +1111,40 @@ public partial class MainWindow : Window
     private List<PlanTask> GetCurrentBusinessTasks()
     {
         DailyEntry? entry = GetEntry(_currentBusinessDate, create: false);
-        return entry?.Tasks
-            .Where(task => !task.IsEmpty)
+        List<PlanTask> tasks = entry?.Tasks
+            .Where(IsSelectablePlanTask)
             .ToList() ?? new List<PlanTask>();
+
+        PlanTask freeTask = entry?.Tasks.FirstOrDefault(task => task.IsFreeTask) ?? CreateFreeTask();
+        tasks.Add(freeTask);
+        return tasks;
+    }
+
+    private PlanTask GetTaskForCurrentTick(DailyEntry entry, PlanTask? activeTask)
+    {
+        if (activeTask == null || activeTask.IsFreeTask || IsTaskCompleted(activeTask))
+        {
+            return EnsureFreeTask(entry);
+        }
+
+        return activeTask;
+    }
+
+    private void SelectCurrentFreeTask()
+    {
+        List<PlanTask> tasks = GetCurrentBusinessTasks();
+        int freeTaskIndex = tasks.FindIndex(task => task.IsFreeTask);
+        if (freeTaskIndex >= 0)
+        {
+            _currentTaskIndex = freeTaskIndex;
+        }
+    }
+
+    private static bool IsSelectablePlanTask(PlanTask task)
+    {
+        return !task.IsHidden &&
+               !task.IsFreeTask &&
+               !task.IsEmpty;
     }
 
     private string GetCalendarTimeText(DateTime date)
@@ -1251,10 +1287,11 @@ public partial class MainWindow : Window
         if (entry.TotalPlannedMinutes <= 0)
         {
             entry.TotalPlannedMinutes = entry.Tasks
-                .Where(task => !task.IsHidden)
+                .Where(task => !task.IsHidden && !task.IsFreeTask)
                 .Sum(task => task.PlannedTotalMinutes);
         }
 
+        MoveHiddenAndUnassignedActualMinutesToFreeTask(entry);
         EnsureHiddenTask(entry, entry.Tasks.FirstOrDefault(task => task.IsHidden));
         entry.Summary ??= string.Empty;
         entry.Plan ??= string.Empty;
@@ -1272,7 +1309,7 @@ public partial class MainWindow : Window
     {
         return string.Join(
             Environment.NewLine,
-            tasks.Where(task => !task.IsHidden).Select((task, index) =>
+            tasks.Where(task => !task.IsHidden && !task.IsFreeTask).Select((task, index) =>
                 string.IsNullOrWhiteSpace(task.PlannedText)
                     ? GetTaskDisplayName(task, index)
                     : $"{GetTaskDisplayName(task, index)} {task.PlannedText.Trim()}"));
@@ -1316,8 +1353,56 @@ public partial class MainWindow : Window
     private static int GetVisiblePlannedMinutes(DailyEntry entry)
     {
         return entry.Tasks
-            .Where(task => !task.IsHidden)
+            .Where(task => !task.IsHidden && !task.IsFreeTask)
             .Sum(task => task.PlannedTotalMinutes);
+    }
+
+    private static void MoveHiddenAndUnassignedActualMinutesToFreeTask(DailyEntry entry)
+    {
+        int hiddenActualMinutes = entry.Tasks
+            .Where(task => task.IsHidden)
+            .Sum(task => task.ActualMinutes);
+        if (hiddenActualMinutes > 0)
+        {
+            EnsureFreeTask(entry).ActualMinutes += hiddenActualMinutes;
+            foreach (PlanTask hiddenTask in entry.Tasks.Where(task => task.IsHidden))
+            {
+                hiddenTask.ActualMinutes = 0;
+            }
+        }
+
+        int assignedActualMinutes = entry.Tasks
+            .Where(task => !task.IsHidden)
+            .Sum(task => task.ActualMinutes);
+        int unassignedActualMinutes = Math.Max(0, entry.ActualMinutes - assignedActualMinutes);
+        if (unassignedActualMinutes > 0)
+        {
+            EnsureFreeTask(entry).ActualMinutes += unassignedActualMinutes;
+        }
+    }
+
+    private static PlanTask EnsureFreeTask(DailyEntry entry)
+    {
+        entry.Tasks ??= new List<PlanTask>();
+        PlanTask? freeTask = entry.Tasks.FirstOrDefault(task => task.IsFreeTask);
+        if (freeTask == null)
+        {
+            freeTask = CreateFreeTask();
+            entry.Tasks.Add(freeTask);
+        }
+
+        freeTask.NormalizeFreeTask(FREE_STUDY_TASK_NAME);
+        return freeTask;
+    }
+
+    private static PlanTask CreateFreeTask()
+    {
+        PlanTask freeTask = new()
+        {
+            IsFreeTask = true
+        };
+        freeTask.NormalizeFreeTask(FREE_STUDY_TASK_NAME);
+        return freeTask;
     }
 
     private static void EnsureHiddenTask(DailyEntry entry, PlanTask? existingHiddenTask)
@@ -1333,7 +1418,7 @@ public partial class MainWindow : Window
         PlanTask hiddenTask = new()
         {
             IsHidden = true,
-            ActualMinutes = existingHiddenTask?.ActualMinutes ?? 0
+            ActualMinutes = 0
         };
         hiddenTask.PlannedHours = hiddenMinutes / 60;
         hiddenTask.PlannedMinutes = hiddenMinutes % 60;
@@ -1343,6 +1428,8 @@ public partial class MainWindow : Window
     private static bool IsTaskCompleted(PlanTask? task)
     {
         return task != null &&
+               !task.IsHidden &&
+               !task.IsFreeTask &&
                task.PlannedTotalMinutes > 0 &&
                task.ActualMinutes >= task.PlannedTotalMinutes;
     }
@@ -1732,7 +1819,6 @@ public sealed class LongTermTask : INotifyPropertyChanged
 public sealed class PlanTask : INotifyPropertyChanged
 {
     private string _name = string.Empty;
-    private string _note = string.Empty;
     private string _plannedText = string.Empty;
     private int _plannedHours;
     private int _plannedMinutes;
@@ -1740,11 +1826,12 @@ public sealed class PlanTask : INotifyPropertyChanged
     private string _plannedMinutesText = string.Empty;
     private int _actualMinutes;
     private bool _isReadOnly;
-    private bool _isNoteEditing;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public bool IsHidden { get; set; }
+
+    public bool IsFreeTask { get; set; }
 
     public string Name
     {
@@ -1787,22 +1874,6 @@ public sealed class PlanTask : INotifyPropertyChanged
         }
     }
 
-    public string Note
-    {
-        get => _note;
-        set
-        {
-            if (_note == value)
-            {
-                return;
-            }
-
-            _note = value ?? string.Empty;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(IsEmpty));
-        }
-    }
-
     public int PlannedHours
     {
         get => _plannedHours;
@@ -1827,8 +1898,11 @@ public sealed class PlanTask : INotifyPropertyChanged
 
             _actualMinutes = Math.Max(0, value);
             OnPropertyChanged();
+            OnPropertyChanged(nameof(IsCompleted));
             OnPropertyChanged(nameof(ActualDisplay));
+            OnPropertyChanged(nameof(ActualForeground));
             OnPropertyChanged(nameof(ActualVisibility));
+            OnPropertyChanged(nameof(CanTransferFreeTime));
             OnPropertyChanged(nameof(IsEmpty));
         }
     }
@@ -1845,22 +1919,28 @@ public sealed class PlanTask : INotifyPropertyChanged
             }
 
             _isReadOnly = value;
-            if (_isReadOnly)
-            {
-                _isNoteEditing = false;
-            }
 
             OnPropertyChanged();
+            OnPropertyChanged(nameof(IsInputReadOnly));
             OnPropertyChanged(nameof(CanEdit));
-            OnPropertyChanged(nameof(IsNoteReadOnly));
+            OnPropertyChanged(nameof(CanTransferFreeTime));
         }
     }
 
     [JsonIgnore]
-    public bool CanEdit => !IsReadOnly;
+    public bool IsInputReadOnly => IsReadOnly || IsFreeTask;
 
     [JsonIgnore]
-    public bool IsNoteReadOnly => IsReadOnly || !_isNoteEditing;
+    public bool CanEdit => !IsReadOnly && !IsFreeTask;
+
+    [JsonIgnore]
+    public bool CanTransferFreeTime => !IsReadOnly && IsFreeTask && ActualMinutes > 0;
+
+    [JsonIgnore]
+    public Visibility RemoveButtonVisibility => IsFreeTask ? Visibility.Collapsed : Visibility.Visible;
+
+    [JsonIgnore]
+    public Visibility TransferButtonVisibility => IsFreeTask ? Visibility.Visible : Visibility.Collapsed;
 
     [JsonIgnore]
     public string PlannedHoursText
@@ -1904,15 +1984,36 @@ public sealed class PlanTask : INotifyPropertyChanged
     public int PlannedTotalMinutes => (_plannedHours * 60) + _plannedMinutes;
 
     [JsonIgnore]
-    public bool IsEmpty =>
-        string.IsNullOrWhiteSpace(Name) &&
-        string.IsNullOrWhiteSpace(Note) &&
-        PlannedTotalMinutes <= 0 &&
-        string.IsNullOrWhiteSpace(_plannedText) &&
-        ActualMinutes <= 0;
+    public bool IsCompleted =>
+        !IsFreeTask &&
+        PlannedTotalMinutes > 0 &&
+        ActualMinutes >= PlannedTotalMinutes;
 
     [JsonIgnore]
-    public string ActualDisplay => ActualMinutes > 0 ? $"已 {MainWindow.FormatDuration(ActualMinutes)}" : string.Empty;
+    public bool IsEmpty =>
+        IsFreeTask
+            ? ActualMinutes <= 0
+            : string.IsNullOrWhiteSpace(Name) &&
+              PlannedTotalMinutes <= 0 &&
+              string.IsNullOrWhiteSpace(_plannedText) &&
+              ActualMinutes <= 0;
+
+    [JsonIgnore]
+    public string ActualDisplay
+    {
+        get
+        {
+            if (ActualMinutes <= 0)
+            {
+                return string.Empty;
+            }
+
+            return IsCompleted ? "已完成" : $"已 {MainWindow.FormatDuration(ActualMinutes)}";
+        }
+    }
+
+    [JsonIgnore]
+    public string ActualForeground => IsCompleted ? "#2FB344" : "#8FA0AF";
 
     [JsonIgnore]
     public Visibility ActualVisibility => ActualMinutes > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -1920,9 +2021,14 @@ public sealed class PlanTask : INotifyPropertyChanged
     public void Normalize()
     {
         Name ??= string.Empty;
-        Note ??= string.Empty;
         PlannedText ??= string.Empty;
-        EndNoteEdit();
+
+        if (IsFreeTask)
+        {
+            NormalizeFreeTask(MainWindow.FREE_STUDY_TASK_NAME);
+            ActualMinutes = Math.Max(0, ActualMinutes);
+            return;
+        }
 
         if (PlannedTotalMinutes <= 0)
         {
@@ -1942,31 +2048,17 @@ public sealed class PlanTask : INotifyPropertyChanged
         SetPlannedFromMinutes(PlannedTotalMinutes);
     }
 
-    public bool BeginNoteEdit()
+    public void NormalizeFreeTask(string name)
     {
-        if (IsReadOnly)
-        {
-            return false;
-        }
-
-        if (!_isNoteEditing)
-        {
-            _isNoteEditing = true;
-            OnPropertyChanged(nameof(IsNoteReadOnly));
-        }
-
-        return true;
-    }
-
-    public void EndNoteEdit()
-    {
-        if (!_isNoteEditing)
-        {
-            return;
-        }
-
-        _isNoteEditing = false;
-        OnPropertyChanged(nameof(IsNoteReadOnly));
+        IsFreeTask = true;
+        IsHidden = false;
+        Name = name;
+        SetPlannedFromMinutes(0);
+        OnPropertyChanged(nameof(IsInputReadOnly));
+        OnPropertyChanged(nameof(CanEdit));
+        OnPropertyChanged(nameof(CanTransferFreeTime));
+        OnPropertyChanged(nameof(RemoveButtonVisibility));
+        OnPropertyChanged(nameof(TransferButtonVisibility));
     }
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
@@ -2008,6 +2100,9 @@ public sealed class PlanTask : INotifyPropertyChanged
         OnPropertyChanged(nameof(PlannedHoursText));
         OnPropertyChanged(nameof(PlannedMinutesText));
         OnPropertyChanged(nameof(PlannedTotalMinutes));
+        OnPropertyChanged(nameof(IsCompleted));
+        OnPropertyChanged(nameof(ActualDisplay));
+        OnPropertyChanged(nameof(ActualForeground));
         OnPropertyChanged(nameof(IsEmpty));
     }
 
