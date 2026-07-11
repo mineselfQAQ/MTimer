@@ -177,6 +177,11 @@ public partial class MainWindow : Window
         SetExpanded(false);
     }
 
+    private void CloseBtn_Click(object sender, RoutedEventArgs e)
+    {
+        Close();
+    }
+
     private void PrevMonthBtn_Click(object sender, RoutedEventArgs e)
     {
         SaveSelectedEntry();
