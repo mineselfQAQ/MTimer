@@ -12,9 +12,9 @@
         ResizeMode="NoResize"
         MouseDown="Window_MouseDown"
         Closing="Window_Closing"
-        Width="230" Height="118"
-        MinWidth="230" MinHeight="118"
-        MaxWidth="230" MaxHeight="118">
+        Width="256" Height="118"
+        MinWidth="256" MinHeight="118"
+        MaxWidth="256" MaxHeight="118">
 
     <Window.Resources>
         <Style x:Key="MiniButton" TargetType="Button">
@@ -168,6 +168,109 @@
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="Margin" Value="3,0,6,0"/>
         </Style>
+
+        <Style x:Key="PanelComboBoxItem" TargetType="ComboBoxItem">
+            <Setter Property="Foreground" Value="#F5F1EB"/>
+            <Setter Property="Background" Value="#20262C"/>
+            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="ItemBorder" Background="{TemplateBinding Background}">
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="#3B4650"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="#FF7A1A"/>
+                                <Setter Property="Foreground" Value="#1A1E22"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PanelComboBox" TargetType="ComboBox">
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Foreground" Value="#F5F1EB"/>
+            <Setter Property="Background" Value="#161B20"/>
+            <Setter Property="BorderBrush" Value="#3D4852"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,2"/>
+            <Setter Property="ItemContainerStyle" Value="{StaticResource PanelComboBoxItem}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <ToggleButton x:Name="ToggleButton"
+                                           Background="{TemplateBinding Background}"
+                                           Foreground="{TemplateBinding Foreground}"
+                                           BorderBrush="{TemplateBinding BorderBrush}"
+                                           BorderThickness="{TemplateBinding BorderThickness}"
+                                           Padding="{TemplateBinding Padding}"
+                                           IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
+                                          Content="{TemplateBinding SelectionBoxItem}"
+                                          ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                          ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}"
+                                          ClickMode="Press"
+                                          Focusable="False">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}">
+                                            <Grid>
+                                                <ContentPresenter Content="{TemplateBinding Content}"
+                                                                  ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                                  Margin="{TemplateBinding Padding}"
+                                                                  VerticalAlignment="Center"
+                                                                  HorizontalAlignment="Left"/>
+                                                <Path Width="8" Height="5"
+                                                      HorizontalAlignment="Right"
+                                                      VerticalAlignment="Center"
+                                                      Margin="0,0,8,0"
+                                                      Fill="{TemplateBinding Foreground}"
+                                                      Data="M 0 0 L 8 0 L 4 5 Z"/>
+                                            </Grid>
+                                        </Border>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                            <Popup x:Name="PART_Popup"
+                                   Placement="Bottom"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   AllowsTransparency="True"
+                                   PopupAnimation="Slide">
+                                <Border Background="#20262C"
+                                        BorderBrush="#51606D"
+                                        BorderThickness="1"
+                                        MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
+                                        Margin="0,2,0,0">
+                                    <ScrollViewer x:Name="DropDownScrollViewer"
+                                                  CanContentScroll="True"
+                                                  VerticalScrollBarVisibility="Auto"
+                                                  MaxHeight="220">
+                                        <ItemsPresenter/>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="WeekdayCheckBox" TargetType="CheckBox">
+            <Setter Property="Foreground" Value="#D9E0E6"/>
+            <Setter Property="Margin" Value="0,0,10,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
     </Window.Resources>
 
     <Grid>
@@ -280,6 +383,16 @@
                             <Rectangle Width="10" Height="10"
                                        Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
                         </Button>
+                        <Button x:Name="CompleteTaskBtn"
+                                Click="CompleteCurrentTaskBtn_Click"
+                                ToolTip="完成当前每日任务"
+                                IsEnabled="False"
+                                Style="{StaticResource MiniButton}">
+                            <Path Width="11" Height="8"
+                                  Style="{StaticResource ButtonIconStrokePath}"
+                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                  Data="M 1 4.5 L 4 7.5 L 10 1.5"/>
+                        </Button>
                         <Button x:Name="ExpandBtn"
                                 Click="ExpandBtn_Click"
                                 ToolTip="展开"
@@ -307,6 +420,7 @@
                             <ColumnDefinition/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
                         <StackPanel Orientation="Horizontal"
@@ -325,6 +439,20 @@
                         </StackPanel>
 
                         <Button Grid.Column="2"
+                                x:Name="StatsBtn"
+                                Click="StatsBtn_Click"
+                                ToolTip="查看统计"
+                                Width="32"
+                                MinWidth="32"
+                                Padding="0"
+                                Margin="0,0,8,0"
+                                Style="{StaticResource ToolbarButton}">
+                            <Path Width="13" Height="13"
+                                  Style="{StaticResource ButtonIconStrokePath}"
+                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                  Data="M 1.5 11.5 L 1.5 1.5 M 1.5 11.5 L 12 11.5 M 4 9 L 6 6.5 L 8 8 L 11 3"/>
+                        </Button>
+                        <Button Grid.Column="3"
                                 x:Name="CollapseBtn"
                                 Click="CollapseBtn_Click"
                                 ToolTip="收起"
@@ -337,7 +465,7 @@
                                   Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                                   Data="M 1.5 1.5 L 5 5 M 5 1.5 L 5 5 L 1.5 5 M 11.5 1.5 L 8 5 M 8 1.5 L 8 5 L 11.5 5 M 11.5 11.5 L 8 8 M 8 11.5 L 8 8 L 11.5 8 M 1.5 11.5 L 5 8 M 5 11.5 L 5 8 L 1.5 8"/>
                         </Button>
-                        <Button Grid.Column="3"
+                        <Button Grid.Column="4"
                                 x:Name="CloseBtn"
                                 Click="CloseBtn_Click"
                                 ToolTip="关闭"
@@ -361,8 +489,9 @@
                             <ColumnDefinition/>
                         </Grid.ColumnDefinitions>
 
-                        <Border Grid.Column="0"
-                                Background="#252D34"
+                        <Grid Grid.Column="0">
+                        <Border x:Name="CalendarPanel"
+                                 Background="#252D34"
                                 BorderBrush="#3B4650"
                                 BorderThickness="1"
                                 CornerRadius="6"
@@ -470,6 +599,329 @@
                             </Grid>
                         </Border>
 
+                        <Border x:Name="LongTaskFocusPanel"
+                                Visibility="Collapsed"
+                                Background="#252D34"
+                                BorderBrush="#3B4650"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="20">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition/>
+                                </Grid.RowDefinitions>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="长期任务详情"
+                                               FontSize="20"
+                                               FontWeight="SemiBold"
+                                               Foreground="#F5F1EB"
+                                               VerticalAlignment="Center"/>
+                                    <Button Grid.Column="1"
+                                            Click="AddLongTaskBtn_Click"
+                                            ToolTip="添加长期任务"
+                                            Width="32"
+                                            MinWidth="32"
+                                            Padding="0"
+                                            Style="{StaticResource ToolbarButton}">
+                                        <Path Width="12" Height="12"
+                                              Style="{StaticResource ButtonIconStrokePath}"
+                                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                              Data="M 6 1.5 L 6 10.5 M 1.5 6 L 10.5 6"/>
+                                    </Button>
+                                    <Button Grid.Column="2"
+                                            Click="ReturnToCalendarBtn_Click"
+                                            ToolTip="返回日历"
+                                            Width="32"
+                                            MinWidth="32"
+                                            Padding="0"
+                                            Margin="8,0,0,0"
+                                            Style="{StaticResource ToolbarButton}">
+                                        <Path Width="11" Height="11"
+                                              Style="{StaticResource ButtonIconStrokePath}"
+                                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                              Data="M 7.5 1.5 L 3 5.5 L 7.5 9.5 M 3.5 5.5 L 11 5.5"/>
+                                    </Button>
+                                </Grid>
+                                <ScrollViewer Grid.Row="1"
+                                              Margin="0,16,0,0"
+                                              VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl x:Name="LongTaskFocusItems">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Background="#1C242B"
+                                                        BorderBrush="#2F3A44"
+                                                        BorderThickness="1"
+                                                        Padding="12"
+                                                        Margin="0,0,0,10">
+                                                    <StackPanel>
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Text="任务设置"
+                                                                       Foreground="#AEB8C2"
+                                                                       FontSize="12"
+                                                                       VerticalAlignment="Center"/>
+                                                            <Button Grid.Column="1"
+                                                                    Tag="{Binding}"
+                                                                    Click="RemoveLongTaskBtn_Click"
+                                                                    ToolTip="删除长期任务"
+                                                                    Width="24"
+                                                                    Height="24"
+                                                                    MinWidth="24"
+                                                                    Padding="0"
+                                                                    Style="{StaticResource ToolbarButton}">
+                                                                <Path Width="10" Height="10"
+                                                                      Style="{StaticResource ButtonIconStrokePath}"
+                                                                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                                      StrokeThickness="2"
+                                                                      Data="M 2 2 L 8 8 M 8 2 L 2 8"/>
+                                                            </Button>
+                                                        </Grid>
+                                                        <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                                                                 TextChanged="LongTaskTextChanged"
+                                                                 PreviewKeyDown="LongTaskInput_PreviewKeyDown"
+                                                                 Style="{StaticResource TaskTextBox}"
+                                                                 Margin="0,8,0,0"/>
+                                                        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                                            <TextBlock Text="出现方式"
+                                                                       Style="{StaticResource TaskTimeUnitText}"
+                                                                       Margin="0,0,8,0"/>
+                                                            <ComboBox Width="148"
+                                                                      SelectedValue="{Binding TaskType, UpdateSourceTrigger=PropertyChanged}"
+                                                                      SelectedValuePath="Tag"
+                                                                      SelectionChanged="LongTaskSelectionChanged"
+                                                                      Style="{StaticResource PanelComboBox}">
+                                                                <ComboBoxItem Content="手动加入" Tag="Progress"/>
+                                                                <ComboBoxItem Content="周期任务" Tag="Recurring"/>
+                                                            </ComboBox>
+                                                        </StackPanel>
+                                                        <Border Visibility="{Binding ProgressSettingsVisibility}"
+                                                                Margin="0,10,0,0"
+                                                                Padding="10"
+                                                                Background="#161B20"
+                                                                BorderBrush="#34404A"
+                                                                BorderThickness="1">
+                                                            <StackPanel>
+                                                                <StackPanel Orientation="Horizontal">
+                                                                    <TextBlock Text="进度格式"
+                                                                               Style="{StaticResource TaskTimeUnitText}"
+                                                                               Margin="0,0,8,0"/>
+                                                                    <ComboBox Width="116"
+                                                                              SelectedValue="{Binding ProgressMode, UpdateSourceTrigger=PropertyChanged}"
+                                                                              SelectedValuePath="Tag"
+                                                                              SelectionChanged="LongTaskSelectionChanged"
+                                                                              Style="{StaticResource PanelComboBox}">
+                                                                        <ComboBoxItem Content="百分比（20%）" Tag="Percent"/>
+                                                                        <ComboBoxItem Content="数量（10题）" Tag="Count"/>
+                                                                    </ComboBox>
+                                                                </StackPanel>
+                                                                <StackPanel Orientation="Horizontal"
+                                                                            Visibility="{Binding PercentProgressVisibility}"
+                                                                            Margin="0,10,0,0">
+                                                                    <TextBlock Text="当前进度"
+                                                                               Style="{StaticResource TaskTimeUnitText}"
+                                                                               Margin="0,0,8,0"/>
+                                                                    <TextBox Width="52"
+                                                                             MaxLength="3"
+                                                                             Text="{Binding CurrentValueText, UpdateSourceTrigger=PropertyChanged}"
+                                                                             TextChanged="LongTaskTextChanged"
+                                                                             Style="{StaticResource TaskTimeTextBox}"/>
+                                                                    <TextBlock Text="%"
+                                                                               Style="{StaticResource TaskTimeUnitText}"/>
+                                                                </StackPanel>
+                                                                <StackPanel Orientation="Horizontal"
+                                                                             Visibility="{Binding CountProgressVisibility}"
+                                                                            Margin="0,10,0,0">
+                                                                    <TextBlock Text="当前数量"
+                                                                               Style="{StaticResource TaskTimeUnitText}"
+                                                                               Margin="0,0,8,0"/>
+                                                                    <TextBox Width="52"
+                                                                             Text="{Binding CurrentValueText, UpdateSourceTrigger=PropertyChanged}"
+                                                                             TextChanged="LongTaskTextChanged"
+                                                                             Style="{StaticResource TaskTimeTextBox}"/>
+                                                                    <TextBox Width="54"
+                                                                             Text="{Binding ProgressUnit, UpdateSourceTrigger=PropertyChanged}"
+                                                                             TextChanged="LongTaskTextChanged"
+                                                                     Style="{StaticResource TaskTextBox}"
+                                                                     Margin="8,0,0,0"/>
+                                                                </StackPanel>
+                                                                <StackPanel Orientation="Horizontal"
+                                                                            Visibility="{Binding CountProgressVisibility}"
+                                                                            Margin="0,10,0,0">
+                                                                    <TextBlock Text="每次完成增加"
+                                                                               Style="{StaticResource TaskTimeUnitText}"
+                                                                               Margin="0,0,8,0"/>
+                                                                    <TextBox Width="52"
+                                                                             Text="{Binding CompletionIncrementText, UpdateSourceTrigger=PropertyChanged}"
+                                                                             TextChanged="LongTaskTextChanged"
+                                                                             Style="{StaticResource TaskTimeTextBox}"/>
+                                                                    <TextBlock Text="{Binding ProgressUnit}"
+                                                                               Style="{StaticResource TaskTimeUnitText}"
+                                                                               Margin="4,0,0,0"/>
+                                                                </StackPanel>
+                                                                <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                                                                    <TextBlock Text="计时方式"
+                                                                               Style="{StaticResource TaskTimeUnitText}"
+                                                                               Margin="0,0,8,0"/>
+                                                                    <ComboBox Width="148"
+                                                                              SelectedValue="{Binding TimerMode, UpdateSourceTrigger=PropertyChanged}"
+                                                                              SelectedValuePath="Tag"
+                                                                              SelectionChanged="LongTaskSelectionChanged"
+                                                                              Style="{StaticResource PanelComboBox}">
+                                                                        <ComboBoxItem Content="倒计时（自动完成）" Tag="Countdown"/>
+                                                                        <ComboBoxItem Content="顺计时（手动完成）" Tag="CountUp"/>
+                                                                    </ComboBox>
+                                                                </StackPanel>
+                                                                <StackPanel Orientation="Horizontal"
+                                                                            Visibility="{Binding CountdownSettingsVisibility}"
+                                                                            Margin="0,14,0,0">
+                                                                    <TextBlock Text="默认单次倒计时"
+                                                                               Style="{StaticResource TaskTimeUnitText}"
+                                                                               Margin="0,0,8,0"/>
+                                                                    <TextBox Width="46"
+                                                                             MaxLength="2"
+                                                                             Text="{Binding DefaultPlannedHoursText, UpdateSourceTrigger=PropertyChanged}"
+                                                                             TextChanged="LongTaskTextChanged"
+                                                                             Style="{StaticResource TaskTimeTextBox}"/>
+                                                                    <TextBlock Text="小时" Style="{StaticResource TaskTimeUnitText}"/>
+                                                                    <TextBox Width="46"
+                                                                             MaxLength="2"
+                                                                             Text="{Binding DefaultPlannedMinutesText, UpdateSourceTrigger=PropertyChanged}"
+                                                                             TextChanged="LongTaskTextChanged"
+                                                                             Style="{StaticResource TaskTimeTextBox}"/>
+                                                                    <TextBlock Text="分钟" Style="{StaticResource TaskTimeUnitText}"/>
+                                                                </StackPanel>
+                                                                <TextBlock Text="加入今日后按该时长倒计时；修改时会同步今天的关联任务，耗尽后自动完成。"
+                                                                           Visibility="{Binding CountdownSettingsVisibility}"
+                                                                           Foreground="#AEB8C2"
+                                                                           FontSize="12"
+                                                                           Margin="0,8,0,0"/>
+                                                                <TextBlock Text="顺计时需手动勾选完成；数量任务会按“每次完成增加”写入累计。"
+                                                                           Visibility="{Binding CountUpHelpVisibility}"
+                                                                           Foreground="#AEB8C2"
+                                                                           FontSize="12"
+                                                                           Margin="0,8,0,0"/>
+                                                            </StackPanel>
+                                                        </Border>
+                                                        <Border Visibility="{Binding RecurringSettingsVisibility}"
+                                                                Margin="0,10,0,0"
+                                                                Padding="10"
+                                                                Background="#161B20"
+                                                                BorderBrush="#34404A"
+                                                                BorderThickness="1">
+                                                            <StackPanel>
+                                                                <TextBlock Text="周期任务会自动出现在符合日期的每日计划中；计时方式与进度记录由上方独立设置。"
+                                                                           Foreground="#C8D0D8"
+                                                                           TextWrapping="Wrap"/>
+                                                                <WrapPanel Margin="0,10,0,0">
+                                                                    <CheckBox Content="一" IsChecked="{Binding IsMonday}" Checked="LongTaskScheduleChanged" Unchecked="LongTaskScheduleChanged" Style="{StaticResource WeekdayCheckBox}"/>
+                                                                    <CheckBox Content="二" IsChecked="{Binding IsTuesday}" Checked="LongTaskScheduleChanged" Unchecked="LongTaskScheduleChanged" Style="{StaticResource WeekdayCheckBox}"/>
+                                                                    <CheckBox Content="三" IsChecked="{Binding IsWednesday}" Checked="LongTaskScheduleChanged" Unchecked="LongTaskScheduleChanged" Style="{StaticResource WeekdayCheckBox}"/>
+                                                                    <CheckBox Content="四" IsChecked="{Binding IsThursday}" Checked="LongTaskScheduleChanged" Unchecked="LongTaskScheduleChanged" Style="{StaticResource WeekdayCheckBox}"/>
+                                                                    <CheckBox Content="五" IsChecked="{Binding IsFriday}" Checked="LongTaskScheduleChanged" Unchecked="LongTaskScheduleChanged" Style="{StaticResource WeekdayCheckBox}"/>
+                                                                    <CheckBox Content="六" IsChecked="{Binding IsSaturday}" Checked="LongTaskScheduleChanged" Unchecked="LongTaskScheduleChanged" Style="{StaticResource WeekdayCheckBox}"/>
+                                                                    <CheckBox Content="日" IsChecked="{Binding IsSunday}" Checked="LongTaskScheduleChanged" Unchecked="LongTaskScheduleChanged" Style="{StaticResource WeekdayCheckBox}"/>
+                                                                </WrapPanel>
+                                                            </StackPanel>
+                                                        </Border>
+                                                        <TextBlock Text="备注"
+                                                                   Foreground="#AEB8C2"
+                                                                   FontSize="12"
+                                                                   Margin="0,12,0,4"/>
+                                                        <TextBox Text="{Binding Note, UpdateSourceTrigger=PropertyChanged}"
+                                                                 TextChanged="LongTaskTextChanged"
+                                                                 Height="72"
+                                                                 VerticalContentAlignment="Top"
+                                                                 Style="{StaticResource TaskTextBox}"/>
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </Grid>
+                        </Border>
+
+                        <Border x:Name="StatisticsPanel"
+                                Visibility="Collapsed"
+                                Background="#252D34"
+                                BorderBrush="#3B4650"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="20">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition/>
+                                </Grid.RowDefinitions>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock x:Name="StatisticsMonthTitle"
+                                               Text="统计"
+                                               FontSize="20"
+                                               FontWeight="SemiBold"
+                                               Foreground="#F5F1EB"
+                                               VerticalAlignment="Center"/>
+                                    <Button Grid.Column="1"
+                                            Click="ReturnToCalendarBtn_Click"
+                                            ToolTip="返回日历"
+                                            Width="32"
+                                            MinWidth="32"
+                                            Padding="0"
+                                            Style="{StaticResource ToolbarButton}">
+                                        <Path Width="11" Height="11"
+                                              Style="{StaticResource ButtonIconStrokePath}"
+                                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                              Data="M 7.5 1.5 L 3 5.5 L 7.5 9.5 M 3.5 5.5 L 11 5.5"/>
+                                    </Button>
+                                </Grid>
+                                <UniformGrid Grid.Row="1" Columns="2" Margin="0,18,0,12">
+                                    <Border Background="#1C242B" BorderBrush="#34404A" BorderThickness="1" Padding="8" Margin="0,0,6,6">
+                                        <StackPanel><TextBlock Text="实际计时" Foreground="#AEB8C2" FontSize="12"/><TextBlock x:Name="StatisticsActualText" Foreground="#F5F1EB" FontSize="16" FontWeight="SemiBold" Margin="0,3,0,0"/></StackPanel>
+                                    </Border>
+                                    <Border Background="#1C242B" BorderBrush="#34404A" BorderThickness="1" Padding="8" Margin="6,0,0,6">
+                                        <StackPanel><TextBlock Text="计划时长" Foreground="#AEB8C2" FontSize="12"/><TextBlock x:Name="StatisticsPlanText" Foreground="#F5F1EB" FontSize="16" FontWeight="SemiBold" Margin="0,3,0,0"/></StackPanel>
+                                    </Border>
+                                    <Border Background="#1C242B" BorderBrush="#34404A" BorderThickness="1" Padding="8" Margin="0,6,6,0">
+                                        <StackPanel><TextBlock Text="活跃天数" Foreground="#AEB8C2" FontSize="12"/><TextBlock x:Name="StatisticsActiveDaysText" Foreground="#F5F1EB" FontSize="16" FontWeight="SemiBold" Margin="0,3,0,0"/></StackPanel>
+                                    </Border>
+                                    <Border Background="#1C242B" BorderBrush="#34404A" BorderThickness="1" Padding="8" Margin="6,6,0,0">
+                                        <StackPanel><TextBlock Text="周期完成" Foreground="#AEB8C2" FontSize="12"/><TextBlock x:Name="StatisticsRecurringText" Foreground="#F5F1EB" FontSize="16" FontWeight="SemiBold" Margin="0,3,0,0"/></StackPanel>
+                                    </Border>
+                                </UniformGrid>
+                                <Border Grid.Row="2" Background="#151B21" BorderBrush="#3D4852" BorderThickness="1" Padding="8">
+                                    <ItemsControl x:Name="StatisticsBarItems">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate><UniformGrid Columns="31"/></ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Height="170" VerticalAlignment="Bottom">
+                                                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                                    <TextBlock Text="{Binding Value}" Foreground="#AEB8C2" FontSize="8" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                                    <Border Grid.Row="1" Height="{Binding Height}" Background="#FF7A1A" CornerRadius="1" VerticalAlignment="Bottom" Margin="2,0"/>
+                                                    <TextBlock Grid.Row="2" Text="{Binding Label}" Foreground="#AEB8C2" FontSize="8" HorizontalAlignment="Center" Margin="0,3,0,0"/>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </Border>
+                            </Grid>
+                        </Border>
+                        </Grid>
+
                         <Border Grid.Column="1"
                                 Background="#FF7A1A"
                                 CornerRadius="1"/>
@@ -562,10 +1014,8 @@
                                                         </Grid.RowDefinitions>
                                                         <Grid.ColumnDefinitions>
                                                             <ColumnDefinition/>
-                                                            <ColumnDefinition Width="38"/>
                                                             <ColumnDefinition Width="Auto"/>
-                                                            <ColumnDefinition Width="38"/>
-                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="32"/>
                                                             <ColumnDefinition Width="46"/>
                                                         </Grid.ColumnDefinitions>
 
@@ -575,31 +1025,50 @@
                                                                  PreviewKeyDown="PlanTaskInput_PreviewKeyDown"
                                                                  Style="{StaticResource TaskTextBox}"/>
 
-                                                        <TextBox Grid.Column="1"
-                                                                 Text="{Binding PlannedHoursText, UpdateSourceTrigger=PropertyChanged}"
-                                                                 IsReadOnly="{Binding IsInputReadOnly}"
-                                                                 MaxLength="2"
-                                                                 TextChanged="PlanTaskTextChanged"
-                                                                 LostFocus="PlanTaskTimeLostFocus"
-                                                                 PreviewKeyDown="PlanTaskInput_PreviewKeyDown"
-                                                                 Style="{StaticResource TaskTimeTextBox}"
-                                                                 Margin="8,0,0,0"/>
-                                                        <TextBlock Grid.Column="2"
-                                                                   Text="小时"
-                                                                   Style="{StaticResource TaskTimeUnitText}"/>
-                                                        <TextBox Grid.Column="3"
-                                                                 Text="{Binding PlannedMinutesText, UpdateSourceTrigger=PropertyChanged}"
-                                                                 IsReadOnly="{Binding IsInputReadOnly}"
-                                                                 MaxLength="2"
-                                                                 TextChanged="PlanTaskTextChanged"
-                                                                 LostFocus="PlanTaskTimeLostFocus"
-                                                                 PreviewKeyDown="PlanTaskInput_PreviewKeyDown"
-                                                                 Style="{StaticResource TaskTimeTextBox}"/>
-                                                        <TextBlock Grid.Column="4"
-                                                                   Text="分钟"
-                                                                   Style="{StaticResource TaskTimeUnitText}"/>
+                                                        <StackPanel Grid.Column="1"
+                                                                    Orientation="Horizontal"
+                                                                    Visibility="{Binding PlannedTimeVisibility}"
+                                                                    Margin="8,0,0,0">
+                                                            <TextBox Width="38"
+                                                                     Text="{Binding PlannedHoursText, UpdateSourceTrigger=PropertyChanged}"
+                                                                     IsReadOnly="{Binding IsInputReadOnly}"
+                                                                     MaxLength="2"
+                                                                     TextChanged="PlanTaskTextChanged"
+                                                                     LostFocus="PlanTaskTimeLostFocus"
+                                                                     PreviewKeyDown="PlanTaskInput_PreviewKeyDown"
+                                                                     Style="{StaticResource TaskTimeTextBox}"/>
+                                                            <TextBlock Text="小时"
+                                                                       Style="{StaticResource TaskTimeUnitText}"/>
+                                                            <TextBox Width="38"
+                                                                     Text="{Binding PlannedMinutesText, UpdateSourceTrigger=PropertyChanged}"
+                                                                     IsReadOnly="{Binding IsInputReadOnly}"
+                                                                     MaxLength="2"
+                                                                     TextChanged="PlanTaskTextChanged"
+                                                                     LostFocus="PlanTaskTimeLostFocus"
+                                                                     PreviewKeyDown="PlanTaskInput_PreviewKeyDown"
+                                                                     Style="{StaticResource TaskTimeTextBox}"/>
+                                                            <TextBlock Text="分钟"
+                                                                       Style="{StaticResource TaskTimeUnitText}"/>
+                                                        </StackPanel>
 
-                                                        <Button Grid.Column="5"
+                                                        <Button Grid.Column="2"
+                                                                Tag="{Binding}"
+                                                                Click="CompletePlanTaskBtn_Click"
+                                                                IsEnabled="{Binding CanCompleteManually}"
+                                                                Visibility="{Binding ManualCompleteButtonVisibility}"
+                                                                ToolTip="{Binding ManualCompleteToolTip}"
+                                                                Style="{StaticResource ToolbarButton}"
+                                                                Width="24"
+                                                                Height="30"
+                                                                MinWidth="24"
+                                                                Padding="0"
+                                                                Margin="6,0,0,0">
+                                                            <Path Width="11" Height="8"
+                                                                  Style="{StaticResource ButtonIconStrokePath}"
+                                                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                                  Data="M 1 4.5 L 4 7.5 L 10 1.5"/>
+                                                        </Button>
+                                                        <Button Grid.Column="3"
                                                                 Tag="{Binding}"
                                                                 Click="RemoveTaskBtn_Click"
                                                                 IsEnabled="{Binding CanEdit}"
@@ -617,7 +1086,7 @@
                                                                   StrokeThickness="2"
                                                                   Data="M 2 2 L 8 8 M 8 2 L 2 8"/>
                                                         </Button>
-                                                        <Button Grid.Column="5"
+                                                        <Button Grid.Column="6"
                                                                 Tag="{Binding}"
                                                                 Click="TransferFreeTaskBtn_Click"
                                                                 IsEnabled="{Binding CanTransferFreeTime}"
@@ -636,7 +1105,7 @@
                                                         </Button>
                                                         <TextBlock Grid.Row="1"
                                                                    Grid.Column="0"
-                                                                   Grid.ColumnSpan="6"
+                                                                   Grid.ColumnSpan="7"
                                                                    Text="{Binding ActualDisplay}"
                                                                    Visibility="{Binding ActualVisibility}"
                                                                    Foreground="{Binding ActualForeground}"
@@ -655,6 +1124,7 @@
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition/>
                                     <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="长期任务"
                                            FontSize="15"
@@ -662,8 +1132,21 @@
                                            Foreground="#F5F1EB"
                                            HorizontalAlignment="Left"
                                            VerticalAlignment="Center"/>
+                                <Button Grid.Column="1"
+                                        Click="ExpandLongTasksBtn_Click"
+                                        ToolTip="展开长期任务详情"
+                                        Width="32"
+                                        MinWidth="32"
+                                        Padding="0"
+                                        Margin="0,0,8,0"
+                                        Style="{StaticResource ToolbarButton}">
+                                    <Path Width="13" Height="13"
+                                          Style="{StaticResource ButtonIconStrokePath}"
+                                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                          Data="M 1.5 5 L 1.5 1.5 L 5 1.5 M 8 1.5 L 11.5 1.5 L 11.5 5 M 11.5 8 L 11.5 11.5 L 8 11.5 M 5 11.5 L 1.5 11.5 L 1.5 8"/>
+                                </Button>
                                 <Button x:Name="AddLongTaskBtn"
-                                        Grid.Column="1"
+                                         Grid.Column="2"
                                         Click="AddLongTaskBtn_Click"
                                         ToolTip="添加长期任务"
                                         Width="32"
@@ -691,38 +1174,62 @@
                                                         Padding="8"
                                                         Margin="0,0,0,8">
                                                     <Grid>
-                                                        <Grid.RowDefinitions>
-                                                            <RowDefinition Height="Auto"/>
-                                                            <RowDefinition Height="Auto"/>
-                                                        </Grid.RowDefinitions>
                                                         <Grid.ColumnDefinitions>
                                                             <ColumnDefinition/>
-                                                            <ColumnDefinition Width="46"/>
                                                             <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="26"/>
+                                                            <ColumnDefinition Width="26"/>
                                                             <ColumnDefinition Width="40"/>
-                                                            <ColumnDefinition Width="30"/>
                                                         </Grid.ColumnDefinitions>
 
-                                                        <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
-                                                                 TextChanged="LongTaskTextChanged"
-                                                                 PreviewKeyDown="LongTaskInput_PreviewKeyDown"
-                                                                 Style="{StaticResource TaskTextBox}"/>
-                                                        <TextBox Grid.Column="1"
-                                                                 Text="{Binding ProgressText, UpdateSourceTrigger=PropertyChanged}"
-                                                                 MaxLength="3"
-                                                                 TextChanged="LongTaskTextChanged"
-                                                                 LostFocus="LongTaskProgressLostFocus"
-                                                                 PreviewKeyDown="LongTaskInput_PreviewKeyDown"
-                                                                 Style="{StaticResource TaskTimeTextBox}"
-                                                                 Margin="8,0,0,0"/>
-                                                        <TextBlock Grid.Column="2"
-                                                                   Text="%"
-                                                                   Style="{StaticResource TaskTimeUnitText}"/>
+                                                        <TextBlock Text="{Binding Name}"
+                                                                   Foreground="#F5F1EB"
+                                                                   FontSize="14"
+                                                                   VerticalAlignment="Center"
+                                                                   TextTrimming="CharacterEllipsis"/>
+                                                        <TextBlock Grid.Column="1"
+                                                                   Text="{Binding ProgressDisplay}"
+                                                                   Foreground="#FF9D45"
+                                                                   FontWeight="SemiBold"
+                                                                   VerticalAlignment="Center"
+                                                                   Margin="8,0"/>
+                                                        <Button Grid.Column="2"
+                                                                Tag="{Binding}"
+                                                                Click="DecreaseLongTaskProgressBtn_Click"
+                                                                ToolTip="进度减 1"
+                                                                Style="{StaticResource ToolbarButton}"
+                                                                Width="22"
+                                                                Height="26"
+                                                                MinWidth="22"
+                                                                Padding="0"
+                                                                Margin="4,0,0,0">
+                                                            <TextBlock Text="−"
+                                                                       FontSize="16"
+                                                                       FontWeight="SemiBold"
+                                                                       HorizontalAlignment="Center"
+                                                                       VerticalAlignment="Center"/>
+                                                        </Button>
                                                         <Button Grid.Column="3"
                                                                 Tag="{Binding}"
-                                                                Click="AddLongTaskToTodayBtn_Click"
-                                                                IsEnabled="{Binding CanAddToToday}"
-                                                                ToolTip="加入今日"
+                                                                Click="IncreaseLongTaskProgressBtn_Click"
+                                                                ToolTip="进度加 1"
+                                                                Style="{StaticResource ToolbarButton}"
+                                                                Width="22"
+                                                                Height="26"
+                                                                MinWidth="22"
+                                                                Padding="0"
+                                                                Margin="2,0,0,0">
+                                                            <TextBlock Text="+"
+                                                                       FontSize="15"
+                                                                       FontWeight="SemiBold"
+                                                                       HorizontalAlignment="Center"
+                                                                       VerticalAlignment="Center"/>
+                                                        </Button>
+                                                        <Button Grid.Column="4"
+                                                                  Tag="{Binding}"
+                                                                 Click="AddLongTaskToTodayBtn_Click"
+                                                                 IsEnabled="{Binding CanAddToToday}"
+                                                                ToolTip="加入或恢复今天"
                                                                 Style="{StaticResource ToolbarButton}"
                                                                 Width="36"
                                                                 Height="30"
@@ -739,32 +1246,6 @@
                                                                       Data="M 4.5 1 L 4.5 8 M 1 4.5 L 8 4.5"/>
                                                             </Grid>
                                                         </Button>
-                                                        <Button Grid.Column="4"
-                                                                Tag="{Binding}"
-                                                                Click="RemoveLongTaskBtn_Click"
-                                                                ToolTip="删除长期任务"
-                                                                Style="{StaticResource ToolbarButton}"
-                                                                Width="24"
-                                                                Height="30"
-                                                                MinWidth="24"
-                                                                Padding="0"
-                                                                Margin="6,0,0,0">
-                                                            <Path Width="10" Height="10"
-                                                                  Style="{StaticResource ButtonIconStrokePath}"
-                                                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                                                  StrokeThickness="2"
-                                                                  Data="M 2 2 L 8 8 M 8 2 L 2 8"/>
-                                                        </Button>
-                                                        <TextBox Grid.Row="1"
-                                                                 Grid.Column="0"
-                                                                 Grid.ColumnSpan="5"
-                                                                 Text="{Binding Note, UpdateSourceTrigger=Explicit}"
-                                                                 IsReadOnly="{Binding IsNoteReadOnly}"
-                                                                 PreviewMouseDoubleClick="LongTaskNote_PreviewMouseDoubleClick"
-                                                                 PreviewKeyDown="LongTaskNote_PreviewKeyDown"
-                                                                 LostFocus="LongTaskNote_LostFocus"
-                                                                 Style="{StaticResource TaskTextBox}"
-                                                                 Margin="0,8,0,0"/>
                                                     </Grid>
                                                 </Border>
                                             </DataTemplate>
