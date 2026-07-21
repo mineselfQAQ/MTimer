@@ -1,8 +1,7 @@
 ﻿<Application x:Class="MWPFProject_Timer.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:local="clr-namespace:MWPFProject_Timer"
-             StartupUri="MainWindow.xaml">
+             xmlns:local="clr-namespace:MWPFProject_Timer">
     <Application.Resources>
          
     </Application.Resources>

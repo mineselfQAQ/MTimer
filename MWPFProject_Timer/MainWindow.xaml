@@ -169,6 +169,14 @@
             <Setter Property="Margin" Value="3,0,6,0"/>
         </Style>
 
+        <Style x:Key="DurationStepButton" TargetType="Button" BasedOn="{StaticResource ToolbarButton}">
+            <Setter Property="Width" Value="34"/>
+            <Setter Property="MinWidth" Value="34"/>
+            <Setter Property="Height" Value="15"/>
+            <Setter Property="Padding" Value="1,0"/>
+            <Setter Property="FontSize" Value="9"/>
+        </Style>
+
         <Style x:Key="PanelComboBoxItem" TargetType="ComboBoxItem">
             <Setter Property="Foreground" Value="#F5F1EB"/>
             <Setter Property="Background" Value="#20262C"/>
@@ -433,9 +441,44 @@
                             <TextBlock x:Name="ExpandedMinuteCounter"
                                        Text="00:00"
                                        FontSize="18"
+                                        FontWeight="SemiBold"
+                                        Foreground="#F5F1EB"
+                                        VerticalAlignment="Center"/>
+                            <TextBlock Text="当前："
+                                       FontSize="13"
+                                       Foreground="#AEB8C2"
+                                       VerticalAlignment="Center"
+                                       Margin="18,0,0,0"/>
+                            <TextBlock x:Name="ExpandedCurrentTaskName"
+                                       Text="自由学习"
+                                       FontSize="13"
                                        FontWeight="SemiBold"
                                        Foreground="#F5F1EB"
-                                       VerticalAlignment="Center"/>
+                                       VerticalAlignment="Center"
+                                       MaxWidth="160"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <Button Click="StartBtn_Click"
+                                    ToolTip="开始当前任务"
+                                    Width="32"
+                                    MinWidth="32"
+                                    Padding="0"
+                                    Margin="14,0,6,0"
+                                    Style="{StaticResource ToolbarButton}">
+                                <Path Width="10" Height="12"
+                                      Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                      Style="{StaticResource ButtonIconFillPath}"
+                                      Data="M 1 1 L 10 6 L 1 11 Z"/>
+                            </Button>
+                            <Button Click="StopBtn_Click"
+                                    ToolTip="停止计时"
+                                    Width="32"
+                                    MinWidth="32"
+                                    Padding="0"
+                                    Margin="0,0,8,0"
+                                    Style="{StaticResource ToolbarButton}">
+                                <Rectangle Width="10" Height="10"
+                                           Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                            </Button>
                         </StackPanel>
 
                         <Button Grid.Column="2"
@@ -739,7 +782,7 @@
                                                                 </StackPanel>
                                                                 <StackPanel Orientation="Horizontal"
                                                                              Visibility="{Binding CountProgressVisibility}"
-                                                                            Margin="0,10,0,0">
+                                                                             Margin="0,10,0,0">
                                                                     <TextBlock Text="当前数量"
                                                                                Style="{StaticResource TaskTimeUnitText}"
                                                                                Margin="0,0,8,0"/>
@@ -811,6 +854,12 @@
                                                                            Margin="0,8,0,0"/>
                                                             </StackPanel>
                                                         </Border>
+                                                        <CheckBox Content="记录题号（每日计划中逐条录入）"
+                                                                  IsChecked="{Binding TrackProblemNumbers, UpdateSourceTrigger=PropertyChanged}"
+                                                                  Click="LongTaskScheduleChanged"
+                                                                  ToolTip="开启后，可在每日计划中输入任意题号内容并逐条添加。"
+                                                                  Foreground="#D9E0E6"
+                                                                  Margin="0,10,0,0"/>
                                                         <Border Visibility="{Binding RecurringSettingsVisibility}"
                                                                 Margin="0,10,0,0"
                                                                 Padding="10"
@@ -857,11 +906,14 @@
                                 BorderThickness="1"
                                 CornerRadius="6"
                                 Padding="20">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled">
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
-                                    <RowDefinition/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="186"/>
                                 </Grid.RowDefinitions>
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -901,7 +953,52 @@
                                         <StackPanel><TextBlock Text="周期完成" Foreground="#AEB8C2" FontSize="12"/><TextBlock x:Name="StatisticsRecurringText" Foreground="#F5F1EB" FontSize="16" FontWeight="SemiBold" Margin="0,3,0,0"/></StackPanel>
                                     </Border>
                                 </UniformGrid>
-                                <Border Grid.Row="2" Background="#151B21" BorderBrush="#3D4852" BorderThickness="1" Padding="8">
+                                <Border Grid.Row="2"
+                                        Background="#151B21"
+                                        BorderBrush="#3D4852"
+                                        BorderThickness="1"
+                                        Padding="10"
+                                        Margin="0,0,0,12">
+                                    <StackPanel>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="算法题题号"
+                                                       Foreground="#F5F1EB"
+                                                       FontSize="13"
+                                                       FontWeight="SemiBold"/>
+                                            <TextBlock x:Name="StatisticsProblemCountText"
+                                                       Grid.Column="1"
+                                                       Text="暂无记录"
+                                                       Foreground="#FF9D45"
+                                                       FontSize="12"/>
+                                        </Grid>
+                                        <TextBlock x:Name="StatisticsProblemEmptyText"
+                                                   Text="本月暂无题号记录"
+                                                   Foreground="#8FA0AF"
+                                                   FontSize="12"
+                                                   Margin="0,8,0,0"/>
+                                        <ItemsControl x:Name="StatisticsProblemItems">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid Margin="0,8,0,0">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="48"/>
+                                                            <ColumnDefinition Width="92"/>
+                                                            <ColumnDefinition/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Text="{Binding DateText}" Foreground="#AEB8C2" FontSize="12"/>
+                                                        <TextBlock Grid.Column="1" Text="{Binding TaskName}" Foreground="#F5F1EB" FontSize="12" TextTrimming="CharacterEllipsis"/>
+                                                        <TextBlock Grid.Column="2" Text="{Binding ProblemNumbersText}" Foreground="#FF9D45" FontSize="12" TextWrapping="Wrap"/>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+                                <Border Grid.Row="3" Background="#151B21" BorderBrush="#3D4852" BorderThickness="1" Padding="8">
                                     <ItemsControl x:Name="StatisticsBarItems">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate><UniformGrid Columns="31"/></ItemsPanelTemplate>
@@ -919,6 +1016,7 @@
                                     </ItemsControl>
                                 </Border>
                             </Grid>
+                            </ScrollViewer>
                         </Border>
                         </Grid>
 
@@ -1002,116 +1100,388 @@
                                                   Margin="10">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
-                                                <Border Background="#1C242B"
-                                                        BorderBrush="#2F3A44"
-                                                        BorderThickness="1"
-                                                        Padding="8"
-                                                        Margin="0,0,0,8">
+                                                <Border PreviewMouseLeftButtonDown="PlanTaskCard_PreviewMouseLeftButtonDown"
+                                                        ToolTip="双击切换当前计时任务">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Background" Value="#1C242B"/>
+                                                            <Setter Property="BorderBrush" Value="#2F3A44"/>
+                                                            <Setter Property="BorderThickness" Value="1"/>
+                                                            <Setter Property="Padding" Value="8"/>
+                                                            <Setter Property="Margin" Value="0,0,0,8"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsCurrentTimerTask}" Value="True">
+                                                                    <Setter Property="Background" Value="#26323A"/>
+                                                                    <Setter Property="BorderBrush" Value="#FF7A1A"/>
+                                                                    <Setter Property="BorderThickness" Value="2"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
                                                     <Grid>
                                                         <Grid.RowDefinitions>
                                                             <RowDefinition Height="Auto"/>
                                                             <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
                                                         </Grid.RowDefinitions>
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition/>
-                                                            <ColumnDefinition Width="Auto"/>
-                                                            <ColumnDefinition Width="32"/>
-                                                            <ColumnDefinition Width="46"/>
-                                                        </Grid.ColumnDefinitions>
 
-                                                        <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                                                        <TextBox Grid.Row="0"
+                                                                 Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
                                                                  IsReadOnly="{Binding IsInputReadOnly}"
                                                                  TextChanged="PlanTaskTextChanged"
+                                                                 LostFocus="PlanTaskInputLostFocus"
                                                                  PreviewKeyDown="PlanTaskInput_PreviewKeyDown"
                                                                  Style="{StaticResource TaskTextBox}"/>
 
-                                                        <StackPanel Grid.Column="1"
-                                                                    Orientation="Horizontal"
-                                                                    Visibility="{Binding PlannedTimeVisibility}"
-                                                                    Margin="8,0,0,0">
-                                                            <TextBox Width="38"
-                                                                     Text="{Binding PlannedHoursText, UpdateSourceTrigger=PropertyChanged}"
-                                                                     IsReadOnly="{Binding IsInputReadOnly}"
-                                                                     MaxLength="2"
-                                                                     TextChanged="PlanTaskTextChanged"
-                                                                     LostFocus="PlanTaskTimeLostFocus"
-                                                                     PreviewKeyDown="PlanTaskInput_PreviewKeyDown"
-                                                                     Style="{StaticResource TaskTimeTextBox}"/>
-                                                            <TextBlock Text="小时"
-                                                                       Style="{StaticResource TaskTimeUnitText}"/>
-                                                            <TextBox Width="38"
-                                                                     Text="{Binding PlannedMinutesText, UpdateSourceTrigger=PropertyChanged}"
-                                                                     IsReadOnly="{Binding IsInputReadOnly}"
-                                                                     MaxLength="2"
-                                                                     TextChanged="PlanTaskTextChanged"
-                                                                     LostFocus="PlanTaskTimeLostFocus"
-                                                                     PreviewKeyDown="PlanTaskInput_PreviewKeyDown"
-                                                                     Style="{StaticResource TaskTimeTextBox}"/>
-                                                            <TextBlock Text="分钟"
-                                                                       Style="{StaticResource TaskTimeUnitText}"/>
-                                                        </StackPanel>
+                                                        <Grid Grid.Row="1" Margin="0,8,0,0">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <Button Grid.Column="0"
+                                                                    Tag="{Binding}"
+                                                                    Click="TogglePlanTaskTimerModeBtn_Click"
+                                                                    IsEnabled="{Binding CanEdit}"
+                                                                    Visibility="{Binding RemoveButtonVisibility}"
+                                                                    ToolTip="{Binding TimerModeToggleToolTip}"
+                                                                    Style="{StaticResource ToolbarButton}"
+                                                                    Height="30"
+                                                                    MinWidth="52"
+                                                                    Padding="6,0">
+                                                                <TextBlock Text="{Binding TimerModeLabel}" FontSize="11"/>
+                                                            </Button>
+                                                            <StackPanel Grid.Column="1"
+                                                                        Orientation="Horizontal"
+                                                                        Visibility="{Binding PlannedTimeVisibility}"
+                                                                        Margin="8,0,0,0">
+                                                                <TextBlock Text="{Binding PlannedCompactDisplay}"
+                                                                           Foreground="#F5F1EB"
+                                                                           FontSize="12"
+                                                                           FontWeight="SemiBold"
+                                                                           VerticalAlignment="Center"
+                                                                           MinWidth="42"/>
+                                                                <StackPanel Orientation="Vertical" Margin="6,0,0,0">
+                                                                    <Button Content="+1h"
+                                                                            Tag="60"
+                                                                            CommandParameter="{Binding}"
+                                                                            Click="AdjustPlanTaskDurationBtn_Click"
+                                                                            Style="{StaticResource DurationStepButton}"/>
+                                                                    <Button Content="−1h"
+                                                                            Tag="-60"
+                                                                            CommandParameter="{Binding}"
+                                                                            Click="AdjustPlanTaskDurationBtn_Click"
+                                                                            Style="{StaticResource DurationStepButton}"
+                                                                            Margin="0,2,0,0"/>
+                                                                </StackPanel>
+                                                                <StackPanel Orientation="Vertical" Margin="4,0,0,0">
+                                                                    <Button Content="+15m"
+                                                                            Tag="15"
+                                                                            CommandParameter="{Binding}"
+                                                                            Click="AdjustPlanTaskDurationBtn_Click"
+                                                                            Style="{StaticResource DurationStepButton}"/>
+                                                                    <Button Content="−15m"
+                                                                            Tag="-15"
+                                                                            CommandParameter="{Binding}"
+                                                                            Click="AdjustPlanTaskDurationBtn_Click"
+                                                                            Style="{StaticResource DurationStepButton}"
+                                                                            Margin="0,2,0,0"/>
+                                                                </StackPanel>
+                                                                <StackPanel Orientation="Vertical" Margin="4,0,0,0">
+                                                                    <Button Content="+5m"
+                                                                            Tag="5"
+                                                                            CommandParameter="{Binding}"
+                                                                            Click="AdjustPlanTaskDurationBtn_Click"
+                                                                            Style="{StaticResource DurationStepButton}"/>
+                                                                    <Button Content="−5m"
+                                                                            Tag="-5"
+                                                                            CommandParameter="{Binding}"
+                                                                            Click="AdjustPlanTaskDurationBtn_Click"
+                                                                            Style="{StaticResource DurationStepButton}"
+                                                                            Margin="0,2,0,0"/>
+                                                                </StackPanel>
+                                                            </StackPanel>
+                                                            <Button Grid.Column="3"
+                                                                    Tag="{Binding}"
+                                                                    Click="CompletePlanTaskBtn_Click"
+                                                                    IsEnabled="{Binding CanCompleteManually}"
+                                                                    Visibility="{Binding ManualCompleteButtonVisibility}"
+                                                                    ToolTip="{Binding ManualCompleteToolTip}"
+                                                                    Style="{StaticResource ToolbarButton}"
+                                                                    Width="24"
+                                                                    Height="30"
+                                                                    MinWidth="24"
+                                                                    Padding="0"
+                                                                    Margin="6,0,0,0">
+                                                                <Path Width="11" Height="8"
+                                                                      Style="{StaticResource ButtonIconStrokePath}"
+                                                                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                                      Data="M 1 4.5 L 4 7.5 L 10 1.5"/>
+                                                            </Button>
+                                                            <Button Grid.Column="3"
+                                                                    Tag="{Binding}"
+                                                                    Click="TransferFreeTaskBtn_Click"
+                                                                    IsEnabled="{Binding CanTransferFreeTime}"
+                                                                    Visibility="{Binding TransferButtonVisibility}"
+                                                                    ToolTip="归入任务"
+                                                                    Style="{StaticResource ToolbarButton}"
+                                                                    Width="36"
+                                                                    Height="30"
+                                                                    MinWidth="36"
+                                                                    Padding="0"
+                                                                    Margin="6,0,0,0">
+                                                                <Path Width="15" Height="12"
+                                                                      Style="{StaticResource ButtonIconStrokePath}"
+                                                                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                                      Data="M 1.5 6 L 8.5 6 M 6 3.5 L 8.5 6 L 6 8.5 M 10.5 2 L 13.5 2 L 13.5 10 L 10.5 10"/>
+                                                            </Button>
+                                                            <Button Grid.Column="4"
+                                                                    Tag="{Binding}"
+                                                                    Click="RemoveTaskBtn_Click"
+                                                                    IsEnabled="{Binding CanEdit}"
+                                                                    Visibility="{Binding RemoveButtonVisibility}"
+                                                                    ToolTip="删除任务"
+                                                                    Style="{StaticResource ToolbarButton}"
+                                                                    Width="24"
+                                                                    Height="30"
+                                                                    MinWidth="24"
+                                                                    Padding="0"
+                                                                    Margin="6,0,0,0">
+                                                                <Path Width="10" Height="10"
+                                                                      Style="{StaticResource ButtonIconStrokePath}"
+                                                                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                                      StrokeThickness="2"
+                                                                      Data="M 2 2 L 8 8 M 8 2 L 2 8"/>
+                                                            </Button>
+                                                        </Grid>
 
-                                                        <Button Grid.Column="2"
-                                                                Tag="{Binding}"
-                                                                Click="CompletePlanTaskBtn_Click"
-                                                                IsEnabled="{Binding CanCompleteManually}"
-                                                                Visibility="{Binding ManualCompleteButtonVisibility}"
-                                                                ToolTip="{Binding ManualCompleteToolTip}"
-                                                                Style="{StaticResource ToolbarButton}"
-                                                                Width="24"
-                                                                Height="30"
-                                                                MinWidth="24"
-                                                                Padding="0"
-                                                                Margin="6,0,0,0">
-                                                            <Path Width="11" Height="8"
-                                                                  Style="{StaticResource ButtonIconStrokePath}"
-                                                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                                                  Data="M 1 4.5 L 4 7.5 L 10 1.5"/>
-                                                        </Button>
-                                                        <Button Grid.Column="3"
-                                                                Tag="{Binding}"
-                                                                Click="RemoveTaskBtn_Click"
-                                                                IsEnabled="{Binding CanEdit}"
-                                                                Visibility="{Binding RemoveButtonVisibility}"
-                                                                ToolTip="删除任务"
-                                                                Style="{StaticResource ToolbarButton}"
-                                                                Width="24"
-                                                                Height="30"
-                                                                MinWidth="24"
-                                                                Padding="0"
-                                                                Margin="6,0,0,0">
-                                                            <Path Width="10" Height="10"
-                                                                  Style="{StaticResource ButtonIconStrokePath}"
-                                                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                                                  StrokeThickness="2"
-                                                                  Data="M 2 2 L 8 8 M 8 2 L 2 8"/>
-                                                        </Button>
-                                                        <Button Grid.Column="6"
-                                                                Tag="{Binding}"
-                                                                Click="TransferFreeTaskBtn_Click"
-                                                                IsEnabled="{Binding CanTransferFreeTime}"
-                                                                Visibility="{Binding TransferButtonVisibility}"
-                                                                ToolTip="归入任务"
-                                                                Style="{StaticResource ToolbarButton}"
-                                                                Width="36"
-                                                                Height="30"
-                                                                MinWidth="36"
-                                                                Padding="0"
-                                                                Margin="6,0,0,0">
-                                                            <Path Width="15" Height="12"
-                                                                  Style="{StaticResource ButtonIconStrokePath}"
-                                                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                                                  Data="M 1.5 6 L 8.5 6 M 6 3.5 L 8.5 6 L 6 8.5 M 10.5 2 L 13.5 2 L 13.5 10 L 10.5 10"/>
-                                                        </Button>
-                                                        <TextBlock Grid.Row="1"
-                                                                   Grid.Column="0"
-                                                                   Grid.ColumnSpan="7"
-                                                                   Text="{Binding ActualDisplay}"
-                                                                   Visibility="{Binding ActualVisibility}"
-                                                                   Foreground="{Binding ActualForeground}"
-                                                                   FontSize="11"
-                                                                   HorizontalAlignment="Left"
-                                                                   Margin="0,4,0,0"/>
+                                                        <Grid Grid.Row="2"
+                                                              Visibility="{Binding ProblemNumbersVisibility}"
+                                                              Margin="0,8,0,0">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Text="题号"
+                                                                       Style="{StaticResource TaskTimeUnitText}"
+                                                                       Margin="0,0,8,0"/>
+                                                            <TextBox Grid.Column="1"
+                                                                     Text="{Binding ProblemNumberInput, UpdateSourceTrigger=PropertyChanged}"
+                                                                     IsReadOnly="{Binding IsProblemNumberInputReadOnly}"
+                                                                     ToolTip="输入任意题号内容后，选择右侧的正确或错误"
+                                                                     Style="{StaticResource TaskTextBox}"/>
+                                                            <StackPanel Grid.Column="2"
+                                                                        Orientation="Horizontal"
+                                                                        Margin="6,0,0,0">
+                                                                <Button Tag="{Binding}"
+                                                                        Click="AddCorrectProblemNumberBtn_Click"
+                                                                        IsEnabled="{Binding CanEdit}"
+                                                                        ToolTip="记录正确题"
+                                                                        Style="{StaticResource ToolbarButton}"
+                                                                        Width="26"
+                                                                        Height="30"
+                                                                        MinWidth="26"
+                                                                        Padding="0">
+                                                                    <Path Width="12"
+                                                                          Height="12"
+                                                                          Stroke="#2FB344"
+                                                                          StrokeThickness="2"
+                                                                          StrokeStartLineCap="Round"
+                                                                          StrokeEndLineCap="Round"
+                                                                          StrokeLineJoin="Round"
+                                                                          Data="M 1 6 L 4.5 9.5 L 11 2"/>
+                                                                </Button>
+                                                                <Button Tag="{Binding}"
+                                                                        Click="AddWrongProblemNumberBtn_Click"
+                                                                        IsEnabled="{Binding CanEdit}"
+                                                                        ToolTip="记录错误题"
+                                                                        Style="{StaticResource ToolbarButton}"
+                                                                        Width="26"
+                                                                        Height="30"
+                                                                        MinWidth="26"
+                                                                        Padding="0"
+                                                                        Margin="4,0,0,0">
+                                                                    <Grid Width="12" Height="12">
+                                                                        <Ellipse Stroke="#E25555" StrokeThickness="1.6"/>
+                                                                        <Path Stroke="#E25555"
+                                                                              StrokeThickness="1.6"
+                                                                              StrokeStartLineCap="Round"
+                                                                              StrokeEndLineCap="Round"
+                                                                              Data="M 3.25 3.25 L 8.75 8.75 M 8.75 3.25 L 3.25 8.75"/>
+                                                                    </Grid>
+                                                                </Button>
+                                                            </StackPanel>
+                                                        </Grid>
+
+                                                        <ItemsControl Grid.Row="3"
+                                                                      ItemsSource="{Binding ProblemNumberEntries}"
+                                                                      Visibility="{Binding ProblemNumberEntriesVisibility}"
+                                                                      Margin="0,6,0,0">
+                                                            <ItemsControl.ItemsPanel>
+                                                                <ItemsPanelTemplate>
+                                                                    <WrapPanel/>
+                                                                </ItemsPanelTemplate>
+                                                            </ItemsControl.ItemsPanel>
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <Border Background="#253039"
+                                                                            BorderBrush="#3D4852"
+                                                                            BorderThickness="1"
+                                                                            CornerRadius="3"
+                                                                            Padding="6,3"
+                                                                            Margin="0,0,5,5">
+                                                                        <StackPanel Orientation="Horizontal">
+                                                                            <Grid Width="10"
+                                                                                  Height="10"
+                                                                                  Margin="0,0,4,0"
+                                                                                  VerticalAlignment="Center">
+                                                                                <Path Stroke="#2FB344"
+                                                                                      StrokeThickness="1.7"
+                                                                                      StrokeStartLineCap="Round"
+                                                                                      StrokeEndLineCap="Round"
+                                                                                      StrokeLineJoin="Round"
+                                                                                      Data="M 1 5 L 3.75 7.75 L 9 2">
+                                                                                    <Path.Style>
+                                                                                        <Style TargetType="Path">
+                                                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                                                            <Style.Triggers>
+                                                                                                <DataTrigger Binding="{Binding IsCorrect}" Value="True">
+                                                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                                                </DataTrigger>
+                                                                                            </Style.Triggers>
+                                                                                        </Style>
+                                                                                    </Path.Style>
+                                                                                </Path>
+                                                                                <Grid>
+                                                                                    <Grid.Style>
+                                                                                        <Style TargetType="Grid">
+                                                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                                                            <Style.Triggers>
+                                                                                                <DataTrigger Binding="{Binding IsCorrect}" Value="False">
+                                                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                                                </DataTrigger>
+                                                                                            </Style.Triggers>
+                                                                                        </Style>
+                                                                                    </Grid.Style>
+                                                                                    <Ellipse Stroke="#E25555" StrokeThickness="1.4"/>
+                                                                                    <Path Stroke="#E25555"
+                                                                                          StrokeThickness="1.4"
+                                                                                          StrokeStartLineCap="Round"
+                                                                                          StrokeEndLineCap="Round"
+                                                                                          Data="M 2.7 2.7 L 7.3 7.3 M 7.3 2.7 L 2.7 7.3"/>
+                                                                                </Grid>
+                                                                                <TextBlock Text="?"
+                                                                                           Foreground="#8FA0AF"
+                                                                                           FontSize="10"
+                                                                                           FontWeight="SemiBold"
+                                                                                           HorizontalAlignment="Center"
+                                                                                           VerticalAlignment="Center">
+                                                                                    <TextBlock.Style>
+                                                                                        <Style TargetType="TextBlock">
+                                                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                                                            <Style.Triggers>
+                                                                                                <DataTrigger Binding="{Binding IsUnmarked}" Value="True">
+                                                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                                                </DataTrigger>
+                                                                                            </Style.Triggers>
+                                                                                        </Style>
+                                                                                    </TextBlock.Style>
+                                                                                </TextBlock>
+                                                                            </Grid>
+                                                                            <TextBlock Text="{Binding Value}"
+                                                                                       Foreground="#F5F1EB"
+                                                                                       FontSize="11"
+                                                                                       VerticalAlignment="Center"/>
+                                                                            <Button Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                                    CommandParameter="{Binding}"
+                                                                                    Click="RemoveProblemNumberBtn_Click"
+                                                                                    ToolTip="删除题号"
+                                                                                    Style="{StaticResource ToolbarButton}"
+                                                                                    Width="18"
+                                                                                    Height="18"
+                                                                                    MinWidth="18"
+                                                                                    Padding="0"
+                                                                                    Margin="5,0,0,0">
+                                                                                <Path Width="10"
+                                                                                      Height="12"
+                                                                                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                                                      StrokeThickness="1.4"
+                                                                                      StrokeStartLineCap="Round"
+                                                                                      StrokeEndLineCap="Round"
+                                                                                      StrokeLineJoin="Round"
+                                                                                      Data="M 3 3 L 9 3 L 8.3 11 L 3.7 11 Z M 2 2 L 10 2 M 5 1 L 7 1"/>
+                                                                            </Button>
+                                                                        </StackPanel>
+                                                                    </Border>
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+
+                                                        <StackPanel Grid.Row="4"
+                                                                    Orientation="Horizontal"
+                                                                    Margin="0,5,0,0">
+                                                            <TextBlock Text="实计"
+                                                                       Foreground="#8FA0AF"
+                                                                       FontSize="11"
+                                                                       VerticalAlignment="Center"
+                                                                       Margin="0,0,5,0"/>
+                                                            <TextBlock Text="{Binding ActualCompactDisplay}"
+                                                                       Foreground="{Binding ActualForeground}"
+                                                                       FontSize="11"
+                                                                       FontWeight="SemiBold"
+                                                                       VerticalAlignment="Center"
+                                                                       MinWidth="34"/>
+                                                            <StackPanel Orientation="Vertical" Margin="6,0,0,0">
+                                                                <Button Content="+15m"
+                                                                        Tag="15"
+                                                                        CommandParameter="{Binding}"
+                                                                        Click="AdjustPlanTaskActualTimeBtn_Click"
+                                                                        IsEnabled="{Binding CanAdjustActualTime}"
+                                                                        Style="{StaticResource DurationStepButton}"/>
+                                                                <Button Content="−15m"
+                                                                        Tag="-15"
+                                                                        CommandParameter="{Binding}"
+                                                                        Click="AdjustPlanTaskActualTimeBtn_Click"
+                                                                        IsEnabled="{Binding CanAdjustActualTime}"
+                                                                        Style="{StaticResource DurationStepButton}"
+                                                                        Margin="0,2,0,0"/>
+                                                            </StackPanel>
+                                                            <StackPanel Orientation="Vertical" Margin="4,0,0,0">
+                                                                <Button Content="+5m"
+                                                                        Tag="5"
+                                                                        CommandParameter="{Binding}"
+                                                                        Click="AdjustPlanTaskActualTimeBtn_Click"
+                                                                        IsEnabled="{Binding CanAdjustActualTime}"
+                                                                        Style="{StaticResource DurationStepButton}"/>
+                                                                <Button Content="−5m"
+                                                                        Tag="-5"
+                                                                        CommandParameter="{Binding}"
+                                                                        Click="AdjustPlanTaskActualTimeBtn_Click"
+                                                                        IsEnabled="{Binding CanAdjustActualTime}"
+                                                                        Style="{StaticResource DurationStepButton}"
+                                                                        Margin="0,2,0,0"/>
+                                                            </StackPanel>
+                                                            <StackPanel Orientation="Vertical" Margin="4,0,0,0">
+                                                                <Button Content="+1m"
+                                                                        Tag="1"
+                                                                        CommandParameter="{Binding}"
+                                                                        Click="AdjustPlanTaskActualTimeBtn_Click"
+                                                                        IsEnabled="{Binding CanAdjustActualTime}"
+                                                                        Style="{StaticResource DurationStepButton}"/>
+                                                                <Button Content="−1m"
+                                                                        Tag="-1"
+                                                                        CommandParameter="{Binding}"
+                                                                        Click="AdjustPlanTaskActualTimeBtn_Click"
+                                                                        IsEnabled="{Binding CanAdjustActualTime}"
+                                                                        Style="{StaticResource DurationStepButton}"
+                                                                        Margin="0,2,0,0"/>
+                                                            </StackPanel>
+                                                        </StackPanel>
                                                     </Grid>
                                                 </Border>
                                             </DataTemplate>
@@ -1203,11 +1573,13 @@
                                                                 MinWidth="22"
                                                                 Padding="0"
                                                                 Margin="4,0,0,0">
-                                                            <TextBlock Text="−"
-                                                                       FontSize="16"
-                                                                       FontWeight="SemiBold"
-                                                                       HorizontalAlignment="Center"
-                                                                       VerticalAlignment="Center"/>
+                                                            <Path Width="10"
+                                                                  Height="10"
+                                                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                                  StrokeThickness="1.8"
+                                                                  StrokeStartLineCap="Round"
+                                                                  StrokeEndLineCap="Round"
+                                                                  Data="M 1 5 L 9 5"/>
                                                         </Button>
                                                         <Button Grid.Column="3"
                                                                 Tag="{Binding}"
@@ -1219,11 +1591,13 @@
                                                                 MinWidth="22"
                                                                 Padding="0"
                                                                 Margin="2,0,0,0">
-                                                            <TextBlock Text="+"
-                                                                       FontSize="15"
-                                                                       FontWeight="SemiBold"
-                                                                       HorizontalAlignment="Center"
-                                                                       VerticalAlignment="Center"/>
+                                                            <Path Width="10"
+                                                                  Height="10"
+                                                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                                  StrokeThickness="1.8"
+                                                                  StrokeStartLineCap="Round"
+                                                                  StrokeEndLineCap="Round"
+                                                                  Data="M 1 5 L 9 5 M 5 1 L 5 9"/>
                                                         </Button>
                                                         <Button Grid.Column="4"
                                                                   Tag="{Binding}"
