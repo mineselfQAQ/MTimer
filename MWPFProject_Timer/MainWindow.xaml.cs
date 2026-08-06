@@ -97,7 +97,7 @@ public partial class MainWindow : Window
     public MainWindow()
         : this(
             new TimerDataPaths(Directory.GetCurrentDirectory()),
-            GetBusinessDate(DateTime.Now),
+            DateTime.Now,
             startTimer: true)
     {
     }
@@ -229,16 +229,21 @@ public partial class MainWindow : Window
         AddProblemNumber(sender, isCorrect: true);
     }
 
+    private void AddNeedsImprovementProblemNumberBtn_Click(object sender, RoutedEventArgs e)
+    {
+        AddProblemNumber(sender, isCorrect: null, isNeedsImprovement: true);
+    }
+
     private void AddWrongProblemNumberBtn_Click(object sender, RoutedEventArgs e)
     {
         AddProblemNumber(sender, isCorrect: false);
     }
 
-    private void AddProblemNumber(object sender, bool isCorrect)
+    private void AddProblemNumber(object sender, bool? isCorrect, bool isNeedsImprovement = false)
     {
         if (!IsPlanEditable(_selectedDate) ||
             sender is not Button { Tag: PlanTask task } ||
-            !task.TryAddProblemNumber(isCorrect))
+            !task.TryAddProblemNumber(isCorrect, isNeedsImprovement))
         {
             return;
         }
@@ -425,6 +430,7 @@ public partial class MainWindow : Window
 
         PlanTask task = new()
         {
+            TimerMode = "CountUp",
             IsReadOnly = false,
             CanAdjustActualTime = CanAdjustActualTime(_selectedDate)
         };
@@ -581,6 +587,65 @@ public partial class MainWindow : Window
         task.AdjustProgress(delta);
         SaveLongTermTasks();
         RenderStatistics();
+    }
+
+    private void AddLongTaskSubTaskBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: LongTermTask task })
+        {
+            return;
+        }
+
+        task.AddSubTask();
+    }
+
+    private void RemoveLongTaskSubTaskBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button
+            {
+                Tag: LongTermTask task,
+                CommandParameter: LongTermSubTask subTask
+            } ||
+            !task.RemoveSubTask(subTask))
+        {
+            return;
+        }
+
+        SaveLongTermTasks();
+    }
+
+    private void AdjustLongTaskSubTaskProgressBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button
+            {
+                Tag: LongTermTask task,
+                CommandParameter: LongTermSubTask subTask
+            } button ||
+            !int.TryParse(button.Uid, NumberStyles.Integer, CultureInfo.InvariantCulture, out int delta))
+        {
+            return;
+        }
+
+        subTask.AdjustProgress(delta);
+        task.NotifySubTasksChanged();
+        SaveLongTermTasks();
+    }
+
+    private void LongTaskSubTaskTextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_isLoadingLongTermTasks ||
+            sender is not TextBox textBox)
+        {
+            return;
+        }
+
+        textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+        if (textBox.Tag is LongTermTask task)
+        {
+            task.NotifySubTasksChanged();
+        }
+
+        SaveLongTermTasks();
     }
 
     private void AddLongTaskToTodayBtn_Click(object sender, RoutedEventArgs e)
@@ -1328,6 +1393,7 @@ public partial class MainWindow : Window
         int recurringCompleted = 0;
         int problemRecordCount = 0;
         int correctProblemCount = 0;
+        int needsImprovementProblemCount = 0;
         int wrongProblemCount = 0;
         int unmarkedProblemCount = 0;
         List<int> dailyActualMinutes = new(daysInMonth);
@@ -1366,6 +1432,7 @@ public partial class MainWindow : Window
 
                 problemRecordCount += problemNumbers.Count;
                 correctProblemCount += problemNumbers.Count(item => item.IsCorrect == true);
+                needsImprovementProblemCount += problemNumbers.Count(item => item.IsNeedsImprovement);
                 wrongProblemCount += problemNumbers.Count(item => item.IsCorrect == false);
                 unmarkedProblemCount += problemNumbers.Count(item => item.IsUnmarked);
                 string taskName = string.IsNullOrWhiteSpace(task.Name)
@@ -1388,7 +1455,7 @@ public partial class MainWindow : Window
             ? "暂无"
             : $"{recurringCompleted} / {recurringScheduled}";
         StatisticsProblemCountText.Text = problemRecordCount > 0
-            ? $"本月 {problemRecordCount} 题 · 对 {correctProblemCount} · 错 {wrongProblemCount}" +
+            ? $"本月 {problemRecordCount} 题 · 对 {correctProblemCount} · 待改 {needsImprovementProblemCount} · 错 {wrongProblemCount}" +
               (unmarkedProblemCount > 0 ? $" · 未标 {unmarkedProblemCount}" : string.Empty)
             : "暂无记录";
         StatisticsProblemEmptyText.Visibility = problemRecordCount > 0
@@ -2511,11 +2578,13 @@ public sealed class DailyEntry
 
 public sealed class LongTermTask : INotifyPropertyChanged
 {
-    private const int CurrentSchemaVersion = 3;
+    private const int CurrentSchemaVersion = 4;
+    private const int TimerModeSchemaVersion = 3;
     private const string ProgressTaskType = "Progress";
     private const string RecurringTaskType = "Recurring";
     private const string PercentProgressMode = "Percent";
     private const string CountProgressMode = "Count";
+    private const string ChildProgressMode = "Children";
     private const string CountdownTimerMode = "Countdown";
     private const string CountUpTimerMode = "CountUp";
     private const int AllWeekdaysMask = 127;
@@ -2534,6 +2603,7 @@ public sealed class LongTermTask : INotifyPropertyChanged
     private int _defaultPlannedMinutes;
     private int _weekdayMask = AllWeekdaysMask;
     private bool _trackProblemNumbers;
+    private ObservableCollection<LongTermSubTask> _subTasks = new();
     private bool _isNoteEditing;
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -2635,12 +2705,23 @@ public sealed class LongTermTask : INotifyPropertyChanged
         }
     }
 
+    public ObservableCollection<LongTermSubTask> SubTasks
+    {
+        get => _subTasks;
+        set => _subTasks = value ?? new ObservableCollection<LongTermSubTask>();
+    }
+
     public string ProgressMode
     {
         get => _progressMode;
         set
         {
-            string nextValue = value == CountProgressMode ? CountProgressMode : PercentProgressMode;
+            string nextValue = value switch
+            {
+                CountProgressMode => CountProgressMode,
+                ChildProgressMode => ChildProgressMode,
+                _ => PercentProgressMode
+            };
             if (_progressMode == nextValue)
             {
                 return;
@@ -2830,6 +2911,14 @@ public sealed class LongTermTask : INotifyPropertyChanged
     public Visibility PercentProgressVisibility => ProgressMode == PercentProgressMode ? Visibility.Visible : Visibility.Collapsed;
 
     [JsonIgnore]
+    public Visibility ChildProgressVisibility => ProgressMode == ChildProgressMode ? Visibility.Visible : Visibility.Collapsed;
+
+    [JsonIgnore]
+    public Visibility RootProgressAdjustmentVisibility => ProgressMode == ChildProgressMode
+        ? Visibility.Collapsed
+        : Visibility.Visible;
+
+    [JsonIgnore]
     public Visibility CountdownSettingsVisibility => IsCountdownTimer ? Visibility.Visible : Visibility.Collapsed;
 
     [JsonIgnore]
@@ -2840,6 +2929,11 @@ public sealed class LongTermTask : INotifyPropertyChanged
     {
         get
         {
+            if (ProgressMode == ChildProgressMode)
+            {
+                return SubTasks.Count == 0 ? "暂无子项目" : $"{SubTasks.Count} 项";
+            }
+
             string progress = ProgressMode == PercentProgressMode
                 ? $"{CurrentValue}%"
                 : $"{CurrentValue}{ProgressUnit}";
@@ -2891,7 +2985,10 @@ public sealed class LongTermTask : INotifyPropertyChanged
     public bool IsSunday { get => HasWeekday(64); set => SetWeekday(64, value); }
 
     [JsonIgnore]
-    public bool IsEmpty => string.IsNullOrWhiteSpace(Name) && string.IsNullOrWhiteSpace(Note);
+    public bool IsEmpty =>
+        string.IsNullOrWhiteSpace(Name) &&
+        string.IsNullOrWhiteSpace(Note) &&
+        SubTasks.All(subTask => subTask.IsEmpty);
 
     [JsonIgnore]
     public bool CanAddToToday => !string.IsNullOrWhiteSpace(Name);
@@ -2907,7 +3004,7 @@ public sealed class LongTermTask : INotifyPropertyChanged
             Id = Guid.NewGuid().ToString("N"),
             TaskType = ProgressTaskType,
             ProgressMode = PercentProgressMode,
-            TimerMode = CountdownTimerMode,
+            TimerMode = CountUpTimerMode,
             TargetValue = 100,
             CompletionIncrement = 1,
             ProgressUnit = "题",
@@ -2918,9 +3015,10 @@ public sealed class LongTermTask : INotifyPropertyChanged
     public void Normalize()
     {
         bool isOriginalLegacyTask = SchemaVersion < 2;
-        bool needsTimerModeMigration = SchemaVersion < CurrentSchemaVersion;
+        bool needsTimerModeMigration = SchemaVersion < TimerModeSchemaVersion;
         Name ??= string.Empty;
         Note ??= string.Empty;
+        SubTasks ??= new ObservableCollection<LongTermSubTask>();
 
         if (isOriginalLegacyTask)
         {
@@ -2960,6 +3058,19 @@ public sealed class LongTermTask : INotifyPropertyChanged
             WeekdayMask = AllWeekdaysMask;
         }
 
+        foreach (LongTermSubTask subTask in SubTasks)
+        {
+            subTask.Normalize();
+        }
+
+        for (int index = SubTasks.Count - 1; index >= 0; index--)
+        {
+            if (SubTasks[index].IsEmpty)
+            {
+                SubTasks.RemoveAt(index);
+            }
+        }
+
         LegacyProgress = null;
         SchemaVersion = CurrentSchemaVersion;
         EndNoteEdit();
@@ -2977,6 +3088,32 @@ public sealed class LongTermTask : INotifyPropertyChanged
     public void AdjustProgress(int delta)
     {
         CurrentValue += delta;
+    }
+
+    public LongTermSubTask AddSubTask()
+    {
+        LongTermSubTask subTask = LongTermSubTask.Create();
+        SubTasks.Add(subTask);
+        NotifySubTasksChanged();
+        return subTask;
+    }
+
+    public bool RemoveSubTask(LongTermSubTask subTask)
+    {
+        if (!SubTasks.Remove(subTask))
+        {
+            return false;
+        }
+
+        NotifySubTasksChanged();
+        return true;
+    }
+
+    public void NotifySubTasksChanged()
+    {
+        OnPropertyChanged(nameof(SubTasks));
+        OnPropertyChanged(nameof(ProgressDisplay));
+        OnPropertyChanged(nameof(IsEmpty));
     }
 
     public bool OccursOn(DateTime date)
@@ -3072,6 +3209,8 @@ public sealed class LongTermTask : INotifyPropertyChanged
         OnPropertyChanged(nameof(ProgressMode));
         OnPropertyChanged(nameof(CountProgressVisibility));
         OnPropertyChanged(nameof(PercentProgressVisibility));
+        OnPropertyChanged(nameof(ChildProgressVisibility));
+        OnPropertyChanged(nameof(RootProgressAdjustmentVisibility));
         OnPropertyChanged(nameof(CurrentValue));
         OnPropertyChanged(nameof(CurrentValueText));
         OnPropertyChanged(nameof(TargetValue));
@@ -3124,6 +3263,108 @@ public sealed class LongTermTask : INotifyPropertyChanged
         }
 
         return builder.ToString();
+    }
+}
+
+public sealed class LongTermSubTask : INotifyPropertyChanged
+{
+    private string _id = string.Empty;
+    private string _name = string.Empty;
+    private int _progressPercent;
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    public string Id
+    {
+        get => _id;
+        set => _id = value ?? string.Empty;
+    }
+
+    public string Name
+    {
+        get => _name;
+        set
+        {
+            string nextValue = value ?? string.Empty;
+            if (_name == nextValue)
+            {
+                return;
+            }
+
+            _name = nextValue;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(IsEmpty));
+        }
+    }
+
+    public int ProgressPercent
+    {
+        get => _progressPercent;
+        set
+        {
+            int nextValue = Math.Clamp(value, 0, 100);
+            if (_progressPercent == nextValue)
+            {
+                return;
+            }
+
+            _progressPercent = nextValue;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(ProgressText));
+            OnPropertyChanged(nameof(ProgressDisplay));
+        }
+    }
+
+    [JsonIgnore]
+    public string ProgressText
+    {
+        get => ProgressPercent.ToString(CultureInfo.InvariantCulture);
+        set
+        {
+            string digits = new(value?.Where(char.IsDigit).ToArray() ?? Array.Empty<char>());
+            ProgressPercent = int.TryParse(
+                digits,
+                NumberStyles.Integer,
+                CultureInfo.InvariantCulture,
+                out int progress)
+                ? progress
+                : 0;
+        }
+    }
+
+    [JsonIgnore]
+    public string ProgressDisplay => $"{ProgressPercent}%";
+
+    [JsonIgnore]
+    public bool IsEmpty => string.IsNullOrWhiteSpace(Name);
+
+    public static LongTermSubTask Create()
+    {
+        return new LongTermSubTask
+        {
+            Id = Guid.NewGuid().ToString("N")
+        };
+    }
+
+    public void AdjustProgress(int delta)
+    {
+        ProgressPercent += delta;
+    }
+
+    public void Normalize()
+    {
+        if (string.IsNullOrWhiteSpace(Id))
+        {
+            Id = Guid.NewGuid().ToString("N");
+        }
+
+        Name = Name.Trim();
+        ProgressPercent = ProgressPercent;
+    }
+
+    private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+    {
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 }
 
@@ -3628,7 +3869,7 @@ public sealed class PlanTask : INotifyPropertyChanged
         return ActualMinutes - originalMinutes;
     }
 
-    public bool TryAddProblemNumber(bool isCorrect)
+    public bool TryAddProblemNumber(bool? isCorrect, bool isNeedsImprovement = false)
     {
         string value = ProblemNumberInput.Trim();
         if (value.Length == 0 || IsProblemNumberInputReadOnly)
@@ -3639,7 +3880,8 @@ public sealed class PlanTask : INotifyPropertyChanged
         ProblemNumberEntries.Add(new ProblemNumberEntry
         {
             Value = value,
-            IsCorrect = isCorrect
+            IsCorrect = isCorrect,
+            IsNeedsImprovement = isNeedsImprovement && isCorrect is null
         });
         ProblemNumberInput = string.Empty;
         NotifyProblemNumberEntriesChanged();
@@ -3834,20 +4076,28 @@ public sealed class ProblemNumberEntry
 
     public bool? IsCorrect { get; set; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool IsNeedsImprovement { get; set; }
+
     [JsonIgnore]
-    public bool IsUnmarked => IsCorrect is null;
+    public bool IsUnmarked => IsCorrect is null && !IsNeedsImprovement;
 
     [JsonIgnore]
     public string StatisticsDisplay => IsCorrect switch
     {
         true => $"✓ {Value}",
         false => $"⊗ {Value}",
+        _ when IsNeedsImprovement => $"△ {Value}",
         _ => $"? {Value}"
     };
 
     public void Normalize()
     {
         Value = Value.Trim();
+        if (IsCorrect is not null)
+        {
+            IsNeedsImprovement = false;
+        }
     }
 }
 

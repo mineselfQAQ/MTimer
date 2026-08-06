@@ -49,11 +49,20 @@ internal static class UiVerificationFixture
 
         LongTermTask longTermTask = LongTermTask.CreateLongTermTask();
         longTermTask.Id = "ui-verification-long-task";
-        longTermTask.Name = "验证长期任务";
-        longTermTask.ProgressMode = "Count";
-        longTermTask.ProgressUnit = "题";
-        longTermTask.CurrentValue = 4;
-        longTermTask.TargetValue = 10;
+        longTermTask.Name = "阅读";
+        longTermTask.ProgressMode = "Children";
+        longTermTask.SubTasks.Add(new LongTermSubTask
+        {
+            Id = "ui-verification-reading-unity",
+            Name = "Unity 某项目",
+            ProgressPercent = 35
+        });
+        longTermTask.SubTasks.Add(new LongTermSubTask
+        {
+            Id = "ui-verification-reading-wpf",
+            Name = "WPF 源码阅读",
+            ProgressPercent = 70
+        });
         longTermTask.DefaultPlannedHours = 2;
 
         Dictionary<string, DailyEntry> entries = new()
@@ -66,7 +75,20 @@ internal static class UiVerificationFixture
                 {
                     new()
                     {
-                        Name = "验证截图基础设施",
+                        Name = "算法题状态验证",
+                        TrackProblemNumbers = true,
+                        TimerMode = "CountUp",
+                        ProblemNumberEntries = new List<ProblemNumberEntry>
+                        {
+                            new() { Value = "AC-01", IsCorrect = true },
+                            new() { Value = "Near-02", IsNeedsImprovement = true },
+                            new() { Value = "WA-03", IsCorrect = false },
+                            new() { Value = "Legacy-04", IsCorrect = null }
+                        }
+                    },
+                    new()
+                    {
+                        Name = "阅读",
                         LongTermTaskId = longTermTask.Id,
                         PlannedHours = 2,
                         ActualMinutes = 75
