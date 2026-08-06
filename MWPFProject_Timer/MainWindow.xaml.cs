@@ -15,6 +15,8 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using MTimer.Sync.Contracts;
+using MWPFProject_Timer.Sync;
 
 namespace MWPFProject_Timer;
 
@@ -34,9 +36,17 @@ public partial class MainWindow : Window
     internal const string FREE_STUDY_TASK_NAME = "自由学习";
     private const string UNNAMED_TASK_PREFIX = "未命名任务";
     private const int MONITOR_DEFAULTTONEAREST = 2;
+    private const int MAX_CONSECUTIVE_SYNC_FAILURES = 5;
 
     private static readonly CultureInfo ZhCn = new("zh-CN");
     private static readonly TimeSpan DailyRefreshTime = TimeSpan.FromHours(4);
+    private static readonly TimeSpan SyncHeartbeatInterval = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan SyncRetryCooldown = TimeSpan.FromMinutes(5);
+    private static readonly HashSet<string> NoDeletionAuthoritativeEntityTypes = new(StringComparer.Ordinal);
+    private static readonly HashSet<string> DailyEntryDeletionAuthoritativeEntityTypes = new(StringComparer.Ordinal)
+    {
+        "daily-entry"
+    };
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
@@ -72,7 +82,13 @@ public partial class MainWindow : Window
     private readonly ObservableCollection<StatisticsBar> _statisticsBars = new();
     private readonly ObservableCollection<ProblemRecordStatistic> _problemRecordStatistics = new();
     private readonly TimerDataPaths _dataPaths;
+    private readonly TimerSyncConfigurationStore _syncConfigurationStore;
+    private readonly CancellationTokenSource _syncCancellation = new();
+    private readonly TimerSyncCoordinator? _syncCoordinator;
+    private readonly DispatcherTimer? _syncTimer;
 
+    private TimerSyncOptions _syncOptions;
+    private TimerDeviceIdentity? _deviceIdentity;
     private DispatcherTimer? _minuteTimer;
     private int _minuteCount;
     private double _speedFactor = 1.0;
@@ -83,6 +99,12 @@ public partial class MainWindow : Window
     private bool _isLoadingEntry = true;
     private bool _isLoadingLongTermTasks;
     private bool _isUpdatingTotalPlan;
+    private bool _isApplyingRemoteSync;
+    private bool _isWindowLoaded;
+    private bool _isSyncCooldown;
+    private bool _canInferDailyEntryDeletions;
+    private int _consecutiveSyncFailures;
+    private string? _syncConfigurationError;
     private LeftPaneMode _leftPaneMode = LeftPaneMode.Calendar;
 
     private sealed record FreeTaskTransfer(PlanTask FreeTask, PlanTask TargetTask);
@@ -105,6 +127,8 @@ public partial class MainWindow : Window
     internal MainWindow(TimerDataPaths dataPaths, DateTime businessDate, bool startTimer)
     {
         _dataPaths = dataPaths;
+        _syncConfigurationStore = new TimerSyncConfigurationStore(_dataPaths.SyncConfigFilePath);
+        _syncOptions = TimerSyncOptions.CreateForVerification("PC");
         _currentBusinessDate = GetBusinessDate(businessDate);
         _displayMonth = new DateTime(_currentBusinessDate.Year, _currentBusinessDate.Month, 1);
         _selectedDate = _currentBusinessDate;
@@ -118,6 +142,36 @@ public partial class MainWindow : Window
         if (startTimer)
         {
             InitializeTimer();
+            try
+            {
+                TimerSyncConfigurationLoadResult configurationResult = _syncConfigurationStore.Load();
+                _syncOptions = configurationResult.Options;
+                _syncConfigurationError = configurationResult.ErrorMessage;
+                _syncCoordinator = new TimerSyncCoordinator(_dataPaths.SyncStateFilePath, _syncOptions);
+                _deviceIdentity = _syncCoordinator.DeviceIdentity;
+                _syncTimer = new DispatcherTimer { Interval = SyncHeartbeatInterval };
+                _syncTimer.Tick += SyncTimer_Tick;
+                Loaded += MainWindow_OnLoaded;
+                Closed += MainWindow_OnClosed;
+                if (_syncConfigurationError is not null)
+                {
+                    SetSyncStatus($"同步：配置有误 · {_deviceIdentity.DeviceName}", isError: true);
+                    SyncStatusTextBlock.ToolTip = _syncConfigurationError;
+                }
+                else
+                {
+                    SetSyncStatus($"同步：等待 · {_deviceIdentity.DeviceName}");
+                }
+            }
+            catch
+            {
+                SetSyncStatus("同步：状态不可用", isError: true);
+            }
+        }
+        else
+        {
+            ManualSyncBtn.IsEnabled = false;
+            SetSyncStatus("同步：验证模式");
         }
 
         LoadDailyEntries();
@@ -139,12 +193,325 @@ public partial class MainWindow : Window
         _minuteTimer.Tick += MinuteTimer_Tick;
     }
 
+    private void MainWindow_OnLoaded(object sender, RoutedEventArgs e)
+    {
+        _isWindowLoaded = true;
+        if (_syncCoordinator is not null)
+        {
+            _syncTimer?.Start();
+        }
+
+        _ = RunSyncAsync(force: true, waitForActiveSync: true);
+    }
+
+    private void MainWindow_OnClosed(object? sender, EventArgs e)
+    {
+        _isWindowLoaded = false;
+        _syncTimer?.Stop();
+        _syncCancellation.Cancel();
+        _syncCancellation.Dispose();
+    }
+
+    private async void SyncTimer_Tick(object? sender, EventArgs e)
+    {
+        if (_isSyncCooldown)
+        {
+            _isSyncCooldown = false;
+            _consecutiveSyncFailures = 0;
+            if (_syncTimer != null)
+            {
+                _syncTimer.Interval = SyncHeartbeatInterval;
+            }
+        }
+
+        await RunSyncAsync();
+    }
+
+    private async void ManualSyncBtn_Click(object sender, RoutedEventArgs e)
+    {
+        await RunSyncAsync(force: true, waitForActiveSync: true);
+    }
+
+    private async void SyncSettingsBtn_Click(object sender, RoutedEventArgs e)
+    {
+        var settingsWindow = new SyncSettingsWindow(_syncOptions)
+        {
+            Owner = this
+        };
+        if (settingsWindow.ShowDialog() != true || settingsWindow.SavedOptions is null)
+        {
+            return;
+        }
+
+        SyncSettingsBtn.IsEnabled = false;
+        try
+        {
+            TimerSyncOptions options = settingsWindow.SavedOptions;
+            _syncConfigurationStore.Save(options);
+            if (_syncCoordinator is not null)
+            {
+                await _syncCoordinator.ReconfigureAsync(options, _syncCancellation.Token);
+                _deviceIdentity = _syncCoordinator.DeviceIdentity;
+            }
+
+            _syncOptions = options;
+            _syncConfigurationError = null;
+            RecordSyncAttempt(succeeded: true);
+            if (_isWindowLoaded)
+            {
+                _syncTimer?.Start();
+            }
+
+            SetSyncStatus($"同步：等待 · {_deviceIdentity?.DeviceName ?? _syncOptions.DeviceName}");
+            SyncStatusTextBlock.ToolTip = string.Join(Environment.NewLine, _syncOptions.Endpoints);
+            RenderCalendar();
+
+            if (_syncCoordinator is not null)
+            {
+                await RunSyncAsync(force: true, waitForActiveSync: true);
+            }
+        }
+        catch (Exception exception)
+        {
+            SetSyncStatus("同步：配置保存失败", isError: true);
+            SyncStatusTextBlock.ToolTip = exception.Message;
+        }
+        finally
+        {
+            SyncSettingsBtn.IsEnabled = true;
+        }
+    }
+
+    private void ScheduleSynchronizationAfterLocalChange()
+    {
+        if (_syncCoordinator == null || !_isWindowLoaded || _isApplyingRemoteSync)
+        {
+            return;
+        }
+
+        _ = RunSyncAsync(force: true, waitForActiveSync: true);
+    }
+
+    private async Task<bool> RunSyncAsync(bool force = false, bool waitForActiveSync = false)
+    {
+        if (_syncCoordinator == null || (!force && _isSyncCooldown))
+        {
+            return false;
+        }
+
+        IReadOnlyList<TimerSyncSnapshot> snapshots = CaptureSyncSnapshots();
+        if (_syncConfigurationError is null)
+        {
+            SetSyncStatus($"同步：检查中 · {_deviceIdentity?.DeviceName}");
+        }
+
+        TimerSynchronizationResult result = await _syncCoordinator.SynchronizeAsync(
+            snapshots,
+            _canInferDailyEntryDeletions
+                ? DailyEntryDeletionAuthoritativeEntityTypes
+                : NoDeletionAuthoritativeEntityTypes,
+            waitForActiveSync,
+            _syncCancellation.Token);
+        if (result.WasBusy)
+        {
+            return false;
+        }
+
+        if (!result.Succeeded)
+        {
+            RecordSyncAttempt(succeeded: false);
+            SyncStatusTextBlock.ToolTip = result.Message;
+            return false;
+        }
+
+        try
+        {
+            bool dataChanged = ApplyRemoteSyncChanges(result.PullResponse?.Changes ?? []);
+            _syncCoordinator.CompletePull(result);
+            RecordSyncAttempt(succeeded: true);
+            if (_syncConfigurationError is not null)
+            {
+                SetSyncStatus(
+                    $"同步：配置有误 · {_deviceIdentity?.DeviceName}",
+                    isError: true);
+                SyncStatusTextBlock.ToolTip = _syncConfigurationError;
+            }
+            else
+            {
+                SetSyncStatus($"同步：{DateTime.Now:HH:mm:ss} · {_deviceIdentity?.DeviceName}");
+                SyncStatusTextBlock.ToolTip = result.ConflictCount > 0
+                    ? $"上传 {result.UploadedCount} 项；服务器版本优先 {result.ConflictCount} 项"
+                    : $"上传 {result.UploadedCount} 项；拉取 {result.PullResponse?.Changes.Count ?? 0} 项";
+            }
+
+            if (dataChanged)
+            {
+                UpdateMinuteCountFromCurrentBusinessDate();
+                SaveCurrentCount();
+                LoadSelectedEntry();
+                RenderStatistics();
+                RefreshCurrentTaskDisplay();
+            }
+
+            RenderCalendar();
+            return true;
+        }
+        catch (Exception exception)
+        {
+            RecordSyncAttempt(succeeded: false);
+            SetSyncStatus("同步：应用失败", isError: true);
+            SyncStatusTextBlock.ToolTip = exception.Message;
+            return false;
+        }
+    }
+
+    private IReadOnlyList<TimerSyncSnapshot> CaptureSyncSnapshots()
+    {
+        DateTime dailyUpdatedAtUtc = File.Exists(_dataPaths.PlanFilePath)
+            ? File.GetLastWriteTimeUtc(_dataPaths.PlanFilePath)
+            : DateTime.UtcNow;
+        DateTime longTasksUpdatedAtUtc = File.Exists(_dataPaths.LongTaskFilePath)
+            ? File.GetLastWriteTimeUtc(_dataPaths.LongTaskFilePath)
+            : DateTime.UtcNow;
+
+        List<TimerSyncSnapshot> snapshots = _dailyEntries
+            .Where(pair => !IsEntryEmpty(pair.Value))
+            .Select(pair => new TimerSyncSnapshot(
+                "daily-entry",
+                pair.Key,
+                JsonSerializer.Serialize(pair.Value, JsonOptions),
+                dailyUpdatedAtUtc))
+            .ToList();
+        snapshots.Add(new TimerSyncSnapshot(
+            "long-term-tasks",
+            "default",
+            JsonSerializer.Serialize(
+                _longTermTasks.Where(task => !task.IsEmpty).ToList(),
+                JsonOptions),
+            longTasksUpdatedAtUtc));
+        return snapshots;
+    }
+
+    private bool ApplyRemoteSyncChanges(IReadOnlyList<ServerSyncEntity> changes)
+    {
+        if (changes.Count == 0)
+        {
+            return false;
+        }
+
+        _isApplyingRemoteSync = true;
+        bool dailyEntriesChanged = false;
+        bool longTasksChanged = false;
+        try
+        {
+            foreach (ServerSyncEntity change in changes.OrderBy(item => item.ServerSequence))
+            {
+                if (change.EntityType == "daily-entry")
+                {
+                    if (change.IsDeleted)
+                    {
+                        dailyEntriesChanged |= _dailyEntries.Remove(change.EntityId);
+                        continue;
+                    }
+
+                    DailyEntry entry = JsonSerializer.Deserialize<DailyEntry>(
+                                           change.PayloadJson ?? string.Empty,
+                                           JsonOptions) ??
+                                       throw new InvalidDataException("服务器每日记录为空。");
+                    _dailyEntries[change.EntityId] = NormalizeEntry(entry);
+                    dailyEntriesChanged = true;
+                }
+                else if (change.EntityType == "long-term-tasks" && change.EntityId == "default")
+                {
+                    List<LongTermTask> tasks = change.IsDeleted
+                        ? []
+                        : JsonSerializer.Deserialize<List<LongTermTask>>(
+                              change.PayloadJson ?? string.Empty,
+                              JsonOptions) ?? [];
+                    _isLoadingLongTermTasks = true;
+                    _longTermTasks.Clear();
+                    foreach (LongTermTask task in tasks)
+                    {
+                        task.Normalize();
+                        if (!task.IsEmpty)
+                        {
+                            _longTermTasks.Add(task);
+                        }
+                    }
+
+                    _isLoadingLongTermTasks = false;
+                    longTasksChanged = true;
+                }
+            }
+
+            if (dailyEntriesChanged)
+            {
+                SaveDailyEntries();
+            }
+
+            if (longTasksChanged)
+            {
+                SaveLongTermTasks();
+            }
+
+            return dailyEntriesChanged || longTasksChanged;
+        }
+        finally
+        {
+            _isLoadingLongTermTasks = false;
+            _isApplyingRemoteSync = false;
+        }
+    }
+
+    private void RecordSyncAttempt(bool succeeded)
+    {
+        if (succeeded)
+        {
+            _consecutiveSyncFailures = 0;
+            _isSyncCooldown = false;
+            if (_syncTimer != null)
+            {
+                _syncTimer.Interval = SyncHeartbeatInterval;
+            }
+
+            return;
+        }
+
+        _consecutiveSyncFailures = Math.Min(
+            _consecutiveSyncFailures + 1,
+            MAX_CONSECUTIVE_SYNC_FAILURES);
+        if (_consecutiveSyncFailures >= MAX_CONSECUTIVE_SYNC_FAILURES)
+        {
+            _isSyncCooldown = true;
+            if (_syncTimer != null)
+            {
+                _syncTimer.Interval = SyncRetryCooldown;
+            }
+
+            SetSyncStatus("同步：暂停 5 分钟", isError: true);
+            return;
+        }
+
+        SetSyncStatus(
+            $"同步：失败 {_consecutiveSyncFailures}/{MAX_CONSECUTIVE_SYNC_FAILURES}",
+            isError: true);
+    }
+
+    private void SetSyncStatus(string message, bool isError = false)
+    {
+        SyncStatusTextBlock.Text = message;
+        SyncStatusTextBlock.Foreground = isError
+            ? CreateBrush("#FF8A80")
+            : CreateBrush("#8FA0AF");
+    }
+
     private void MinuteTimer_Tick(object? sender, EventArgs e)
     {
         RefreshBusinessDateIfNeeded();
 
         DailyEntry entry = GetEntry(_currentBusinessDate, create: true)!;
         entry.ActualMinutes++;
+        MarkDailyEntryRecorded(entry);
         _minuteCount = entry.ActualMinutes;
 
         PlanTask? activeTask = GetCurrentTask();
@@ -265,6 +632,11 @@ public partial class MainWindow : Window
 
     private void PersistProblemNumberChanges(PlanTask task)
     {
+        if (_selectedDate.Date <= _currentBusinessDate.Date)
+        {
+            MarkDailyEntryRecorded(GetEntry(_selectedDate, create: true)!);
+        }
+
         bool progressUpdated = SynchronizeCompletedProblemTaskProgress(task);
         SaveSelectedEntry();
         if (progressUpdated)
@@ -344,6 +716,7 @@ public partial class MainWindow : Window
         }
 
         entry.ActualMinutes = Math.Max(0, entry.ActualMinutes + appliedDelta);
+        MarkDailyEntryRecorded(entry);
         bool isCompleted = task.IsCompleted;
         bool progressUpdated = wasCompleted != isCompleted && ApplyTaskCompletionProgress(task, isCompleted);
 
@@ -1137,6 +1510,7 @@ public partial class MainWindow : Window
 
         bool isCompleting = !task.IsManuallyCompleted;
         task.ToggleManualCompletion();
+        MarkDailyEntryRecorded(GetEntry(_currentBusinessDate, create: true)!);
         bool progressUpdated = ApplyTaskCompletionProgress(task, isCompleting);
         if (isCompleting && _minuteTimer?.IsEnabled == true)
         {
@@ -1374,8 +1748,17 @@ public partial class MainWindow : Window
             bool isToday = date.Date == _currentBusinessDate.Date;
             bool hasEntry = HasEntry(date);
             string timeText = GetCalendarTimeText(date);
+            (string deviceLabel, string deviceToolTip) = GetCalendarDeviceInfo(date);
 
-            days.Add(CreateCalendarDay(date, isCurrentMonth, isSelected, isToday, hasEntry, timeText));
+            days.Add(CreateCalendarDay(
+                date,
+                isCurrentMonth,
+                isSelected,
+                isToday,
+                hasEntry,
+                timeText,
+                deviceLabel,
+                deviceToolTip));
         }
 
         CalendarDayItems.ItemsSource = days;
@@ -1548,6 +1931,7 @@ public partial class MainWindow : Window
         if (entry.ActualMinutes <= 0)
         {
             entry.ActualMinutes = savedCount;
+            MarkDailyEntryRecorded(entry);
             if (entry.Tasks.All(task => task.ActualMinutes <= 0))
             {
                 EnsureFreeTask(entry).ActualMinutes = savedCount;
@@ -1569,6 +1953,7 @@ public partial class MainWindow : Window
     private void LoadDailyEntries()
     {
         string planFilePath = _dataPaths.PlanFilePath;
+        _canInferDailyEntryDeletions = false;
         if (!File.Exists(planFilePath))
         {
             return;
@@ -1591,10 +1976,13 @@ public partial class MainWindow : Window
                     _dailyEntries[key] = NormalizeEntry(value);
                 }
             }
+
+            _canInferDailyEntryDeletions = true;
         }
         catch
         {
             _dailyEntries.Clear();
+            _canInferDailyEntryDeletions = false;
         }
     }
 
@@ -1608,6 +1996,8 @@ public partial class MainWindow : Window
 
             string json = JsonSerializer.Serialize(entriesToSave, JsonOptions);
             File.WriteAllText(_dataPaths.PlanFilePath, json, Encoding.UTF8);
+            _canInferDailyEntryDeletions = true;
+            ScheduleSynchronizationAfterLocalChange();
         }
         catch
         {
@@ -1672,11 +2062,13 @@ public partial class MainWindow : Window
                     File.Delete(_dataPaths.LongTaskFilePath);
                 }
 
+                ScheduleSynchronizationAfterLocalChange();
                 return;
             }
 
             string json = JsonSerializer.Serialize(tasksToSave, JsonOptions);
             File.WriteAllText(_dataPaths.LongTaskFilePath, json, Encoding.UTF8);
+            ScheduleSynchronizationAfterLocalChange();
         }
         catch
         {
@@ -1999,6 +2391,32 @@ public partial class MainWindow : Window
         return FormatCompactDuration(displayMinutes);
     }
 
+    private (string Label, string ToolTip) GetCalendarDeviceInfo(DateTime date)
+    {
+        DailyEntry? entry = GetEntry(date, create: false);
+        if (entry?.RecordedDeviceIds is not { Count: > 0 })
+        {
+            return (string.Empty, string.Empty);
+        }
+
+        List<string> deviceNames = entry.RecordedDeviceIds
+            .Where(deviceId => !string.IsNullOrWhiteSpace(deviceId))
+            .Distinct(StringComparer.Ordinal)
+            .Select(deviceId => _syncCoordinator?.ResolveDeviceName(deviceId) ??
+                                (deviceId.Length <= 2 ? deviceId : deviceId[..2]))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (deviceNames.Count == 0)
+        {
+            return (string.Empty, string.Empty);
+        }
+
+        string label = deviceNames.Count <= 2
+            ? string.Join("·", deviceNames)
+            : $"{deviceNames[0]}+{deviceNames.Count - 1}";
+        return (label, $"记录设备：{string.Join("、", deviceNames)}");
+    }
+
     private DailyEntry? GetEntry(DateTime date, bool create)
     {
         string key = GetDateKey(date);
@@ -2015,6 +2433,20 @@ public partial class MainWindow : Window
         entry = new DailyEntry();
         _dailyEntries[key] = entry;
         return entry;
+    }
+
+    private void MarkDailyEntryRecorded(DailyEntry entry)
+    {
+        if (_deviceIdentity == null)
+        {
+            return;
+        }
+
+        entry.RecordedDeviceIds ??= new List<string>();
+        if (!entry.RecordedDeviceIds.Contains(_deviceIdentity.DeviceId, StringComparer.Ordinal))
+        {
+            entry.RecordedDeviceIds.Add(_deviceIdentity.DeviceId);
+        }
     }
 
     private bool EnsureRecurringTasksForDate(DateTime date)
@@ -2127,7 +2559,9 @@ public partial class MainWindow : Window
         bool isSelected,
         bool isToday,
         bool hasEntry,
-        string timeText)
+        string timeText,
+        string deviceLabel,
+        string deviceToolTip)
     {
         Visibility timeVisibility = string.IsNullOrWhiteSpace(timeText) ? Visibility.Collapsed : Visibility.Visible;
 
@@ -2139,6 +2573,8 @@ public partial class MainWindow : Window
                 DayText = date.Day.ToString(CultureInfo.InvariantCulture),
                 TimeText = timeText,
                 TimeVisibility = timeVisibility,
+                DeviceLabel = deviceLabel,
+                DeviceToolTip = deviceToolTip,
                 Background = CalendarSelectedBackground,
                 BorderBrush = CalendarSelectedBorder,
                 Foreground = CalendarSelectedText,
@@ -2157,6 +2593,8 @@ public partial class MainWindow : Window
                 DayText = date.Day.ToString(CultureInfo.InvariantCulture),
                 TimeText = timeText,
                 TimeVisibility = timeVisibility,
+                DeviceLabel = deviceLabel,
+                DeviceToolTip = deviceToolTip,
                 Background = CalendarTodayBackground,
                 BorderBrush = CalendarAccentBorder,
                 Foreground = CalendarNormalText,
@@ -2173,6 +2611,8 @@ public partial class MainWindow : Window
             DayText = date.Day.ToString(CultureInfo.InvariantCulture),
             TimeText = timeText,
             TimeVisibility = timeVisibility,
+            DeviceLabel = deviceLabel,
+            DeviceToolTip = deviceToolTip,
             Background = isCurrentMonth ? CalendarNormalBackground : CalendarMutedBackground,
             BorderBrush = isCurrentMonth ? CalendarNormalBorder : CalendarMutedBorder,
             Foreground = isCurrentMonth ? CalendarNormalText : CalendarMutedText,
@@ -2186,6 +2626,10 @@ public partial class MainWindow : Window
     private static DailyEntry NormalizeEntry(DailyEntry entry)
     {
         entry.Tasks ??= new List<PlanTask>();
+        entry.RecordedDeviceIds = (entry.RecordedDeviceIds ?? new List<string>())
+            .Where(deviceId => !string.IsNullOrWhiteSpace(deviceId))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
 
         foreach (PlanTask task in entry.Tasks)
         {
@@ -2574,6 +3018,8 @@ public sealed class DailyEntry
     public int ActualMinutes { get; set; }
 
     public List<PlanTask> Tasks { get; set; } = new();
+
+    public List<string> RecordedDeviceIds { get; set; } = new();
 }
 
 public sealed class LongTermTask : INotifyPropertyChanged
@@ -4119,6 +4565,14 @@ public sealed class CalendarDayViewModel
     public string TimeText { get; init; } = string.Empty;
 
     public Visibility TimeVisibility { get; init; } = Visibility.Collapsed;
+
+    public string DeviceLabel { get; init; } = string.Empty;
+
+    public string DeviceToolTip { get; init; } = string.Empty;
+
+    public Visibility DeviceLabelVisibility => string.IsNullOrWhiteSpace(DeviceLabel)
+        ? Visibility.Collapsed
+        : Visibility.Visible;
 
     public Brush Background { get; init; } = Brushes.Transparent;
 

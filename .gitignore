@@ -426,3 +426,8 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# MTimer local sync/runtime data
+/data/
+sync_config.json
+sync_state.json

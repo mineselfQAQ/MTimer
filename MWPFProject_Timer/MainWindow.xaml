@@ -426,9 +426,11 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
+                             <ColumnDefinition Width="Auto"/>
+                             <ColumnDefinition Width="Auto"/>
+                             <ColumnDefinition Width="Auto"/>
+                             <ColumnDefinition Width="Auto"/>
+                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
                         <StackPanel Orientation="Horizontal"
@@ -481,7 +483,44 @@
                             </Button>
                         </StackPanel>
 
+                        <TextBlock Grid.Column="1"
+                                   x:Name="SyncStatusTextBlock"
+                                   Text="同步：等待"
+                                   FontSize="11"
+                                   Foreground="#8FA0AF"
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Right"
+                                   Margin="0,0,10,0"
+                                   TextTrimming="CharacterEllipsis"/>
                         <Button Grid.Column="2"
+                                x:Name="SyncSettingsBtn"
+                                Click="SyncSettingsBtn_Click"
+                                ToolTip="同步设置"
+                                Width="32"
+                                MinWidth="32"
+                                Padding="0"
+                                Margin="0,0,8,0"
+                                Style="{StaticResource ToolbarButton}">
+                            <Path Width="13" Height="13"
+                                  Style="{StaticResource ButtonIconStrokePath}"
+                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                  Data="M 1.5 3 L 11.5 3 M 1.5 6.5 L 11.5 6.5 M 1.5 10 L 11.5 10 M 4 1.5 L 4 4.5 M 9 5 L 9 8 M 6 8.5 L 6 11.5"/>
+                        </Button>
+                        <Button Grid.Column="3"
+                                x:Name="ManualSyncBtn"
+                                Click="ManualSyncBtn_Click"
+                                ToolTip="立即同步"
+                                Width="32"
+                                MinWidth="32"
+                                Padding="0"
+                                Margin="0,0,8,0"
+                                Style="{StaticResource ToolbarButton}">
+                            <Path Width="13" Height="13"
+                                  Style="{StaticResource ButtonIconStrokePath}"
+                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                  Data="M 11 4 A 5 5 0 0 0 2.5 2.5 M 2.5 2.5 L 2.5 6 M 2.5 2.5 L 6 2.5 M 2 9 A 5 5 0 0 0 10.5 10.5 M 10.5 10.5 L 10.5 7 M 10.5 10.5 L 7 10.5"/>
+                        </Button>
+                        <Button Grid.Column="4"
                                 x:Name="StatsBtn"
                                 Click="StatsBtn_Click"
                                 ToolTip="查看统计"
@@ -495,7 +534,7 @@
                                   Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                                   Data="M 1.5 11.5 L 1.5 1.5 M 1.5 11.5 L 12 11.5 M 4 9 L 6 6.5 L 8 8 L 11 3"/>
                         </Button>
-                        <Button Grid.Column="3"
+                        <Button Grid.Column="5"
                                 x:Name="CollapseBtn"
                                 Click="CollapseBtn_Click"
                                 ToolTip="收起"
@@ -508,7 +547,7 @@
                                   Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                                   Data="M 1.5 1.5 L 5 5 M 5 1.5 L 5 5 L 1.5 5 M 11.5 1.5 L 8 5 M 8 1.5 L 8 5 L 11.5 5 M 11.5 11.5 L 8 8 M 8 11.5 L 8 8 L 11.5 8 M 1.5 11.5 L 5 8 M 5 11.5 L 5 8 L 1.5 8"/>
                         </Button>
-                        <Button Grid.Column="4"
+                        <Button Grid.Column="6"
                                 x:Name="CloseBtn"
                                 Click="CloseBtn_Click"
                                 ToolTip="关闭"
@@ -619,6 +658,19 @@
                                                                Margin="8,6,0,0"
                                                                HorizontalAlignment="Left"
                                                                VerticalAlignment="Top"/>
+                                                    <Border HorizontalAlignment="Right"
+                                                            VerticalAlignment="Top"
+                                                            Margin="0,5,6,0"
+                                                            Padding="4,1"
+                                                            CornerRadius="4"
+                                                            Background="#26323B"
+                                                            Visibility="{Binding DeviceLabelVisibility}"
+                                                            ToolTip="{Binding DeviceToolTip}">
+                                                        <TextBlock Text="{Binding DeviceLabel}"
+                                                                   Foreground="#F5F1EB"
+                                                                   FontSize="10"
+                                                                   FontWeight="SemiBold"/>
+                                                    </Border>
                                                     <TextBlock Text="{Binding TimeText}"
                                                                Foreground="{Binding TimeForeground}"
                                                                Visibility="{Binding TimeVisibility}"

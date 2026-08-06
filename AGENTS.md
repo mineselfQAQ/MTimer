@@ -11,7 +11,7 @@
 
 ## 项目身份
 
-本仓库是 `MTimer`，一个 .NET 8 WPF 桌面计时器项目，作为 MCodexCore 的嵌套子项目管理。
+本仓库是 `MTimer`，一个包含 .NET 8 WPF 桌面计时器、共享同步协议和 Docker Sync API 的多项目解决方案，作为 MCodexCore 的嵌套子项目管理。
 
 识别本项目时，应结合：
 
@@ -19,7 +19,10 @@
 - `README.md`
 - `MWPFProject_Timer.sln`
 - `MWPFProject_Timer/MWPFProject_Timer.csproj`
-- WPF 入口文件 `MWPFProject_Timer/App.xaml`、`MWPFProject_Timer/MainWindow.xaml`
+- `MTimer.Sync.Contracts/MTimer.Sync.Contracts.csproj`
+- `MTimer.Sync.Api/MTimer.Sync.Api.csproj`
+- `docker-compose.yml`
+- WPF 入口文件 `MWPFProject_Timer/App.xaml`、`MWPFProject_Timer/MainWindow.xaml`，以及同步配置窗口 `MWPFProject_Timer/SyncSettingsWindow.xaml`
 - 项目 default Skill：`../.codex/skills/projects/mtimer/mp-mtimer-default/SKILL.md`
 
 处理本项目时，优先读取并使用上述项目 default Skill。

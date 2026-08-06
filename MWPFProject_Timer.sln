@@ -5,6 +5,10 @@ VisualStudioVersion = 17.13.35828.75 d17.13
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MWPFProject_Timer", "MWPFProject_Timer\MWPFProject_Timer.csproj", "{D4B722B5-E94B-4EA7-B583-18038303B5CC}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MTimer.Sync.Contracts", "MTimer.Sync.Contracts\MTimer.Sync.Contracts.csproj", "{F675B724-E236-4EF7-A8BE-840972BBFCBE}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MTimer.Sync.Api", "MTimer.Sync.Api\MTimer.Sync.Api.csproj", "{92AE3A7E-D27F-41F1-8C71-8826B7B253FD}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +19,14 @@ Global
 		{D4B722B5-E94B-4EA7-B583-18038303B5CC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D4B722B5-E94B-4EA7-B583-18038303B5CC}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D4B722B5-E94B-4EA7-B583-18038303B5CC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F675B724-E236-4EF7-A8BE-840972BBFCBE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F675B724-E236-4EF7-A8BE-840972BBFCBE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F675B724-E236-4EF7-A8BE-840972BBFCBE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F675B724-E236-4EF7-A8BE-840972BBFCBE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{92AE3A7E-D27F-41F1-8C71-8826B7B253FD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{92AE3A7E-D27F-41F1-8C71-8826B7B253FD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{92AE3A7E-D27F-41F1-8C71-8826B7B253FD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{92AE3A7E-D27F-41F1-8C71-8826B7B253FD}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -1,0 +1,15 @@
+services:
+  mtimer-sync:
+    build:
+      context: .
+      dockerfile: MTimer.Sync.Api/Dockerfile
+    image: mtimer-sync:latest
+    container_name: mtimer-sync
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_URLS: http://0.0.0.0:5124
+      MTIMER_SYNC_DATA_DIR: /data/mtimer
+    ports:
+      - "5124:5124"
+    volumes:
+      - ./data/mtimer-sync:/data/mtimer

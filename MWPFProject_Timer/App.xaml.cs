@@ -43,13 +43,22 @@ public partial class App : Application
                 TimerDataPaths dataPaths = new(request.DataRoot);
                 UiVerificationFixture.Write(dataPaths);
 
-                MainWindow verificationWindow = new(
-                    dataPaths,
-                    UiVerificationFixture.BusinessDate,
-                    startTimer: false);
-                verificationWindow.RenderVerificationPng(
-                    request.Scenario,
-                    request.OutputPath);
+                if (request.Scenario == UiVerificationScenario.SyncSettings)
+                {
+                    var verificationWindow = new SyncSettingsWindow(
+                        UiVerificationFixture.WriteAndLoadSyncConfiguration(dataPaths));
+                    verificationWindow.RenderVerificationPng(request.OutputPath);
+                }
+                else
+                {
+                    MainWindow verificationWindow = new(
+                        dataPaths,
+                        UiVerificationFixture.BusinessDate,
+                        startTimer: false);
+                    verificationWindow.RenderVerificationPng(
+                        request.Scenario,
+                        request.OutputPath);
+                }
 
                 Shutdown(0);
             }
