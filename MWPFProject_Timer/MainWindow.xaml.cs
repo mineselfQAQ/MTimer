@@ -608,8 +608,8 @@ public partial class MainWindow : Window
 
     private void AddProblemNumber(object sender, bool? isCorrect, bool isNeedsImprovement = false)
     {
-        if (!IsPlanEditable(_selectedDate) ||
-            sender is not Button { Tag: PlanTask task } ||
+        if (sender is not Button { Tag: PlanTask task } ||
+            !task.CanEditProblemNumbers ||
             !task.TryAddProblemNumber(isCorrect, isNeedsImprovement))
         {
             return;
@@ -620,8 +620,8 @@ public partial class MainWindow : Window
 
     private void RemoveProblemNumberBtn_Click(object sender, RoutedEventArgs e)
     {
-        if (!IsPlanEditable(_selectedDate) ||
-            sender is not Button { Tag: PlanTask task, CommandParameter: ProblemNumberEntry entry } ||
+        if (sender is not Button { Tag: PlanTask task, CommandParameter: ProblemNumberEntry entry } ||
+            !task.CanEditProblemNumbers ||
             !task.RemoveProblemNumber(entry))
         {
             return;
@@ -1463,7 +1463,17 @@ public partial class MainWindow : Window
         RootBorder.Width = EXPANDED_WIDTH;
         RootBorder.Height = EXPANDED_HEIGHT;
 
+        if (scenario == UiVerificationScenario.Calendar)
+        {
+            _selectedDate = UiVerificationFixture.HistoricalDate;
+        }
+
         LoadSelectedEntry();
+        if (scenario == UiVerificationScenario.Calendar)
+        {
+            VerifyHistoricalProblemNumberEditing();
+        }
+
         RenderCalendar();
         RenderStatistics();
         RefreshCurrentTaskDisplay();
@@ -1499,6 +1509,41 @@ public partial class MainWindow : Window
 
         using FileStream stream = File.Create(outputPath);
         encoder.Save(stream);
+    }
+
+    private void VerifyHistoricalProblemNumberEditing()
+    {
+        PlanTask task = _selectedTasks.SingleOrDefault(item => item.Name == "算法题状态验证") ??
+                        throw new InvalidDataException("历史题号验证任务不存在。");
+        if (!task.IsReadOnly || task.CanEdit || !task.CanEditProblemNumbers || task.IsProblemNumberInputReadOnly)
+        {
+            throw new InvalidDataException("历史任务应保持整体只读，并单独允许题号补录。");
+        }
+
+        ProblemNumberEntry removableEntry = task.ProblemNumberEntries
+            .Single(entry => entry.Value == "Legacy-04");
+        RemoveProblemNumberBtn_Click(
+            new Button { Tag = task, CommandParameter = removableEntry },
+            new RoutedEventArgs());
+
+        task.ProblemNumberInput = "补录-05";
+        AddProblemNumber(new Button { Tag = task }, isCorrect: true);
+
+        string json = File.ReadAllText(_dataPaths.PlanFilePath, Encoding.UTF8);
+        Dictionary<string, DailyEntry>? persistedEntries =
+            JsonSerializer.Deserialize<Dictionary<string, DailyEntry>>(json, JsonOptions);
+        DailyEntry? persistedEntry = persistedEntries != null &&
+                                     persistedEntries.TryGetValue(GetDateKey(_selectedDate), out DailyEntry? entry)
+            ? entry
+            : null;
+        PlanTask? persistedTask = persistedEntry?.Tasks
+            .SingleOrDefault(item => item.Name == task.Name);
+        if (persistedTask == null ||
+            persistedTask.ProblemNumberEntries.Any(entry => entry.Value == "Legacy-04") ||
+            !persistedTask.ProblemNumberEntries.Any(entry => entry.Value == "补录-05" && entry.IsCorrect == true))
+        {
+            throw new InvalidDataException("历史题号的删除或补录未正确保存。");
+        }
     }
 
     private void CompleteRecurringTask(PlanTask task)
@@ -3862,6 +3907,8 @@ public sealed class PlanTask : INotifyPropertyChanged
             OnPropertyChanged();
             OnPropertyChanged(nameof(ProblemNumbersVisibility));
             OnPropertyChanged(nameof(ProblemNumberEntriesVisibility));
+            OnPropertyChanged(nameof(CanEditProblemNumbers));
+            OnPropertyChanged(nameof(IsProblemNumberInputReadOnly));
         }
     }
 
@@ -4096,7 +4143,7 @@ public sealed class PlanTask : INotifyPropertyChanged
     public bool IsInputReadOnly => IsReadOnly || IsFreeTask || IsRecurringTask;
 
     [JsonIgnore]
-    public bool IsProblemNumberInputReadOnly => IsReadOnly || IsFreeTask;
+    public bool IsProblemNumberInputReadOnly => !CanEditProblemNumbers;
 
     [JsonIgnore]
     public bool IsCountUpTimer => TimerMode == "CountUp";
@@ -4125,6 +4172,9 @@ public sealed class PlanTask : INotifyPropertyChanged
 
     [JsonIgnore]
     public bool CanEdit => !IsReadOnly && !IsFreeTask;
+
+    [JsonIgnore]
+    public bool CanEditProblemNumbers => TrackProblemNumbers && !IsFreeTask;
 
     [JsonIgnore]
     public bool IsRecurringTask => !string.IsNullOrWhiteSpace(RecurringTaskId);
@@ -4359,6 +4409,7 @@ public sealed class PlanTask : INotifyPropertyChanged
         SetPlannedFromMinutes(0);
         OnPropertyChanged(nameof(IsInputReadOnly));
         OnPropertyChanged(nameof(IsProblemNumberInputReadOnly));
+        OnPropertyChanged(nameof(CanEditProblemNumbers));
         OnPropertyChanged(nameof(ProblemNumbersVisibility));
         OnPropertyChanged(nameof(ProblemNumberEntriesVisibility));
         OnPropertyChanged(nameof(CanEdit));

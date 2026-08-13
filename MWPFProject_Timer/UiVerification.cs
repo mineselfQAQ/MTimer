@@ -44,6 +44,7 @@ internal sealed record UiVerificationRequest(
 internal static class UiVerificationFixture
 {
     internal static readonly DateTime BusinessDate = new(2026, 7, 22, 12, 0, 0);
+    internal static readonly DateTime HistoricalDate = BusinessDate.AddDays(-1);
 
     internal static void Write(TimerDataPaths dataPaths)
     {
@@ -69,7 +70,7 @@ internal static class UiVerificationFixture
 
         Dictionary<string, DailyEntry> entries = new()
         {
-            [BusinessDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)] = new DailyEntry
+            [HistoricalDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)] = new DailyEntry
             {
                 TotalPlannedMinutes = 180,
                 ActualMinutes = 95,

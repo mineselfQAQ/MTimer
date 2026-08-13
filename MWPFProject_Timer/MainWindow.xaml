@@ -1430,7 +1430,7 @@
                                                                         Margin="6,0,0,0">
                                                                 <Button Tag="{Binding}"
                                                                         Click="AddCorrectProblemNumberBtn_Click"
-                                                                        IsEnabled="{Binding CanEdit}"
+                                                                        IsEnabled="{Binding CanEditProblemNumbers}"
                                                                         ToolTip="记录正确题"
                                                                         Style="{StaticResource ToolbarButton}"
                                                                         Width="26"
@@ -1448,7 +1448,7 @@
                                                                 </Button>
                                                                 <Button Tag="{Binding}"
                                                                         Click="AddNeedsImprovementProblemNumberBtn_Click"
-                                                                        IsEnabled="{Binding CanEdit}"
+                                                                        IsEnabled="{Binding CanEditProblemNumbers}"
                                                                         ToolTip="记录待改题（差一点对或需要优化）"
                                                                         Style="{StaticResource ToolbarButton}"
                                                                         Width="26"
@@ -1471,7 +1471,7 @@
                                                                 </Button>
                                                                 <Button Tag="{Binding}"
                                                                         Click="AddWrongProblemNumberBtn_Click"
-                                                                        IsEnabled="{Binding CanEdit}"
+                                                                        IsEnabled="{Binding CanEditProblemNumbers}"
                                                                         ToolTip="记录错误题"
                                                                         Style="{StaticResource ToolbarButton}"
                                                                         Width="26"
@@ -1595,6 +1595,7 @@
                                                                             <Button Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                                                     CommandParameter="{Binding}"
                                                                                     Click="RemoveProblemNumberBtn_Click"
+                                                                                    IsEnabled="{Binding DataContext.CanEditProblemNumbers, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                                                     ToolTip="删除题号"
                                                                                     Style="{StaticResource ToolbarButton}"
                                                                                     Width="18"
