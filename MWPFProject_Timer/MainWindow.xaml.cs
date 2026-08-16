@@ -1469,11 +1469,6 @@ public partial class MainWindow : Window
         }
 
         LoadSelectedEntry();
-        if (scenario == UiVerificationScenario.Calendar)
-        {
-            VerifyHistoricalProblemNumberEditing();
-        }
-
         RenderCalendar();
         RenderStatistics();
         RefreshCurrentTaskDisplay();
@@ -1488,6 +1483,12 @@ public partial class MainWindow : Window
         RootBorder.Measure(new Size(EXPANDED_WIDTH, EXPANDED_HEIGHT));
         RootBorder.Arrange(new Rect(0, 0, EXPANDED_WIDTH, EXPANDED_HEIGHT));
         RootBorder.UpdateLayout();
+
+        if (scenario == UiVerificationScenario.Calendar)
+        {
+            VerifyHistoricalProblemNumberEditing();
+            RootBorder.UpdateLayout();
+        }
 
         RenderTargetBitmap bitmap = new(
             (int)EXPANDED_WIDTH,
@@ -4373,25 +4374,34 @@ public sealed class PlanTask : INotifyPropertyChanged
             return false;
         }
 
-        ProblemNumberEntries.Add(new ProblemNumberEntry
+        List<ProblemNumberEntry> entries = new(ProblemNumberEntries)
         {
-            Value = value,
-            IsCorrect = isCorrect,
-            IsNeedsImprovement = isNeedsImprovement && isCorrect is null
-        });
+            new()
+            {
+                Value = value,
+                IsCorrect = isCorrect,
+                IsNeedsImprovement = isNeedsImprovement && isCorrect is null
+            }
+        };
+        ProblemNumberEntries = entries;
         ProblemNumberInput = string.Empty;
-        NotifyProblemNumberEntriesChanged();
         return true;
     }
 
     public bool RemoveProblemNumber(ProblemNumberEntry entry)
     {
-        if (IsProblemNumberInputReadOnly || !ProblemNumberEntries.Remove(entry))
+        if (IsProblemNumberInputReadOnly)
         {
             return false;
         }
 
-        NotifyProblemNumberEntriesChanged();
+        List<ProblemNumberEntry> entries = new(ProblemNumberEntries);
+        if (!entries.Remove(entry))
+        {
+            return false;
+        }
+
+        ProblemNumberEntries = entries;
         return true;
     }
 
