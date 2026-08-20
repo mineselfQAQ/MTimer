@@ -55,6 +55,33 @@ docker compose up -d --build
 
 SQLite 数据保存在 Compose 的 `./data/mtimer-sync` 持久卷。NAS 部署可把该卷左侧改为明确的宿主机目录。此轻量服务不提供认证，只应运行在本机或受信任的私网中，不要直接暴露到公网；生产数据库和 `.env` 不应提交仓库。
 
+### 从 Windows 更新现有 QNAP 服务
+
+首次创建 NAS 项目与容器是一次性部署操作，不提供独立初始化脚本。已有 MTimer 容器后，使用 `tools/Deploy-MTimerSyncNas.cmd` 更新指定 Git 提交中的 `MTimer.Sync.Contracts` 与 `MTimer.Sync.Api`：
+
+```powershell
+.\tools\Deploy-MTimerSyncNas.cmd NAS_IP NAS_SSH_USER /share/STORAGE_POOL/Container/MTimer HEAD
+```
+
+可以把非敏感连接默认值保存到 Windows 用户环境变量，之后双击 CMD 时只需输入 SSH 密码：
+
+```powershell
+setx MTIMER_NAS_HOST "NAS_IP"
+setx MTIMER_NAS_USER "NAS_SSH_USER"
+setx MTIMER_NAS_REMOTE_PATH "/share/STORAGE_POOL/Container/MTimer"
+```
+
+脚本只部署 `Revision` 指定的已提交状态，不复制未提交工作区。NAS 项目根目录必须保留 `.dockerignore`，避免 live data 进入 Docker 构建上下文。正式更新前，脚本会检查现有 NAS 项目标记和 NAS-only 源码，准备带时间戳的 `.dockerignore`、compose、旧服务端源码与静止 `sync.db` 备份；随后校验复制后的 SHA-256，重建 `mtimer-sync`，并通过 `/health`、空 `/sync/push` 和 `/sync/pull` 核验实际协议版本。脚本不会删除 NAS-only 源码、live data 或悬空镜像。
+
+正式更新前可先执行只读验证：
+
+```powershell
+$env:MTIMER_NAS_VALIDATE_ONLY = "1"
+.\tools\Deploy-MTimerSyncNas.cmd NAS_IP NAS_SSH_USER /share/STORAGE_POOL/Container/MTimer HEAD
+```
+
+SSH 在停止和重建容器时可能分别请求密码；密码不会保存。需要全自动无人值守更新时，应另外配置 SSH 公钥认证。
+
 ## 运行约束
 
 - 普通模式每个 Windows 登录会话只能运行一个 MTimer 实例；重复启动会立即退出，不会读取或修改本地计时数据。
